@@ -13,13 +13,20 @@ ES modules need a web server (opening `index.html` as a file won't work):
     python3 -m http.server 8000
     # open http://localhost:8000
 
+## Controls
+Move A/D · Jump W/Space · Crouch S · Interact E · Abilities J / K.
+Developer only: keys **1–4** switch your role (Scout, Warden, Weaver, Anchor) so every ability can be tested alone.
+
 ## Structure
-- `js/main.js`               – lobby UI, networking setup, boots Phaser
-- `js/net.js`                – host/guest networking (PeerJS wrapper)
+- `js/main.js`                  – lobby UI, networking setup, boots Phaser
+- `js/net.js`                   – host/guest networking (PeerJS wrapper)
+- `js/config.js`                – shared engine/network constants
+- `js/roles.js`                 – role stats (speed, jump, size) and input shape
+- `js/player/PlayerSim.js`      – host-side player simulation: movement + all role abilities
+- `js/player/input.js`          – keyboard → input state
+- `js/scenes/GameScene.js`      – host runs physics, level rules and snapshots; guests render them
+- `js/world/Level.js`           – builds a level from data (visuals everywhere, physics on host)
+- `js/levels/gym.js`            – Ability Gym: one test station per ability
+- `js/objects/PlayerView.js`    – role silhouettes (separate from physics hitboxes)
+- `js/snapshot-buffer.js`       – guest-side interpolation of players and movable objects
 - `js/background-ticker.js` + `js/tick-worker.js` – keep the host simulating while its tab is hidden
-- `js/snapshot-buffer.js`     – guest-side interpolation of host snapshots (smooth movement)
-- `js/config.js`             – shared gameplay constants
-- `js/scenes/GameScene.js`   – gameplay: host runs Arcade Physics, guests render snapshots
-- `js/world/Level.js`         – builds a level from data (visuals everywhere, physics on host)
-- `js/levels/level1.js`       – level data: platforms, plates, gates, finish zone
-- `js/objects/PlayerView.js` – player visuals (separate from the physics hitbox)

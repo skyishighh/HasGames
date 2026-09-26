@@ -94,6 +94,16 @@ Weak: no physical strength; light attracts Watchers. Team role: create paths, po
 Weak: slow, short jump, cannot move while planted. Team role: safety in wind/water/chases, rope paths.
 Tech note: the chain starts as a **straight max-length constraint** (no rope simulation); upgrade to Matter.js ropes only if needed.
 
+### Shared movement feel
+- **Jump buffering** (0.12 s): a jump pressed just before landing still happens.
+- **Coyote time** (0.08 s): a jump pressed just after running off an edge still counts.
+- **Wall grace** (0.1 s, Scout): wall contact counts briefly after touching, so wall-jumps are reliable.
+- Weaver stands still while casting the beam (the direction keys aim it).
+- A player holding onto a planted Anchor (within ~40 px) is sheltered from wind.
+
+### Implementation status
+All four roles are implemented in the **Ability Gym** (`js/levels/gym.js`), a developer test level with one station per ability. Keys 1–4 switch roles for testing. Not yet implemented: Weaver repel on threats (no threats exist yet), Anchor slam stun (no Tracers yet), Warden brace on doors (only crushers so far).
+
 ### Example — "The Vault Door" (Act III)
 Anchor plants on the heavy plate → Weaver powers the lock node → Scout climbs the mesh and pulls the release lever → Warden braces the rising seal → all four pass through.
 

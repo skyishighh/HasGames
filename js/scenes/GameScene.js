@@ -1,17 +1,19 @@
 // Main gameplay scene. The same scene runs on host and guests:
-//  - host:  owns Arcade Physics bodies, applies everyone's input, runs puzzle
-//           logic and broadcasts snapshots
-//  - guest: has no physics; only sends input and draws interpolated snapshots
-import {
-  WIDTH, HEIGHT, GRAVITY, MOVE_SPEED, JUMP_SPEED, PLAYER_W, PLAYER_H, SNAPSHOT_HZ,
-} from '../config.js';
+//  - host:  owns Arcade Physics, runs every PlayerSim (movement + role abilities)
+//           and the level rules, then broadcasts snapshots
+//  - guest: has no physics; sends input and draws interpolated snapshots
+import { WIDTH, HEIGHT, GRAVITY, SNAPSHOT_HZ } from '../config.js';
+import { ROLE_ORDER } from '../roles.js';
 import { PlayerView } from '../objects/PlayerView.js';
+import { PlayerSim } from '../player/PlayerSim.js';
+import { LocalInput } from '../player/input.js';
 import { Level } from '../world/Level.js';
-import level1 from '../levels/level1.js';
 import { SnapshotBuffer } from '../snapshot-buffer.js';
+import gym from '../levels/gym.js';
 
-const EMPTY_INPUT = { left: false, right: false, jump: false };
-const Intersects = Phaser.Geom.Intersects;
+const hit = Phaser.Geom.Intersects.RectangleToRectangle;
+/** Arcade may pass collider arguments in either order; return [player, other]. */
+const split = (a, b) => (a.sim ? [a, b] : [b, a]);
 
 export class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
@@ -25,37 +27,33 @@ export class GameScene extends Phaser.Scene {
     this.onPlayers = data.onPlayers;
     this.onReady = data.onReady;
     this.views = new Map();   // id -> PlayerView
-    this.players = new Map(); // host only: id -> { name, hitbox, input, facing }
+    this.sims = new Map();    // host only: id -> PlayerSim
     this.snapshotTimer = 0;
     this.lastSentInput = '';
     this.buffer = new SnapshotBuffer(); // guest only
-    this.complete = false;
+    this.pendingFx = [];      // host: effects to broadcast with the next snapshot
   }
 
   create() {
     const isHost = this.role === 'host';
-    this.levelData = level1;
-
+    this.levelData = gym;
     this.#createBackground();
     this.level = new Level(this, this.levelData, isHost);
     this.cameras.main.setBounds(0, 0, this.levelData.width, this.levelData.height);
-    this.completeText = this.add.text(WIDTH / 2, HEIGHT / 3, 'Level complete', {
-      fontFamily: 'system-ui, sans-serif', fontSize: '36px', color: '#eeeeee',
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(10).setVisible(false);
-
-    const kb = this.input.keyboard;
-    this.keys = kb.addKeys('A,D,W,SPACE');
-    this.cursors = kb.createCursorKeys();
+    this.beamGfx = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
+    this.localInput = new LocalInput(this);
 
     if (isHost) {
       this.physics.world.gravity.y = GRAVITY;
-      this.physics.world.setBounds(0, 0, this.levelData.width, this.levelData.height);
+      this.physics.world.setBounds(0, 0, this.levelData.width, this.levelData.height + 200);
+      this.physics.world.setBoundsCollision(true, true, true, false); // open bottom: pits
+      this.playerGroup = this.physics.add.group();
+      this.#createColliders();
       this.addPlayer(this.myId, this.myName);
     }
     this.onReady?.(this);
   }
 
-  /** Fixed backdrop (does not scroll with the camera). */
   #createBackground() {
     const tex = this.textures.createCanvas('bg', WIDTH, HEIGHT);
     const ctx = tex.getContext();
@@ -65,121 +63,183 @@ export class GameScene extends Phaser.Scene {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     tex.refresh();
-    this.add.image(0, 0, 'bg').setOrigin(0).setScrollFactor(0);
+    this.add.image(0, 0, 'bg').setOrigin(0).setScrollFactor(0).setDepth(-10);
   }
 
-  #readLocalInput() {
-    const { keys: k, cursors: c } = this;
-    return {
-      left: k.A.isDown || c.left.isDown,
-      right: k.D.isDown || c.right.isDown,
-      jump: k.W.isDown || c.up.isDown || k.SPACE.isDown,
-    };
+  // ---------------------------------------------------------------- host: physics wiring
+  #createColliders() {
+    const L = this.level, P = this.playerGroup, phys = this.physics;
+    const movables = [...L.blocks, ...L.crates].map((o) => o.view);
+    const statics = [L.solids, ...L.gates.map((g) => g.body), ...L.cracked.map((c) => c.view),
+      ...L.fragile.map((f) => f.view), ...L.phantom.map((p) => p.view), ...L.crushers.map((c) => c.view)];
+
+    for (const s of statics) phys.add.collider(P, s, null, (a, b) => this.#onPlayerHitsStatic(...split(a, b)));
+    // One-way platforms: only from above, and not while dropping through.
+    for (const o of L.oneWay) phys.add.collider(P, o.view, null, (a, b) => {
+      const [pl] = split(a, b);
+      return pl.sim.dropT <= 0 && pl.body.velocity.y >= 0 && pl.body.bottom <= o.view.body.top + 10;
+    });
+    // Heavy blocks move only for the Warden; crates for everyone.
+    for (const b of L.blocks) phys.add.collider(P, b.view, null, (a, c) => {
+      const [pl, blk] = split(a, c);
+      blk.body.pushable = pl.sim.role === 'warden';
+      return true;
+    });
+    for (const c of L.crates) phys.add.collider(P, c.view);
+    // Players stand on each other's heads (and on a planted Anchor), but walk through each other sideways.
+    phys.add.collider(P, P, null, (a, b) => this.#stackRule(a, b));
+    for (const m of movables) {
+      for (const s of statics) phys.add.collider(m, s);
+      for (const o of movables) if (o !== m) phys.add.collider(m, o);
+    }
   }
 
-  // ---------- Host API (called from net callbacks) ----------
+  #onPlayerHitsStatic(pl, obj) {
+    const frag = this.level.fragile.find((f) => f.view === obj);
+    // The Warden's weight breaks fragile floors a moment after stepping on them.
+    if (frag && pl.sim.role === 'warden' && !frag.breakAt && pl.body.bottom <= obj.body.top + 6) frag.breakAt = this.time.now + 250;
+    return true;
+  }
+
+  #stackRule(a, b) {
+    const [sa, sb] = [a.sim, b.sim];
+    if (sa.ride || sb.ride) return false;
+    const [top, bottom] = a.body.center.y < b.body.center.y ? [a, b] : [b, a];
+    if (bottom.sim.planted) return true;                        // a planted Anchor is solid
+    const landing = top.body.bottom <= bottom.body.top + 8 && top.body.velocity.y >= bottom.body.velocity.y;
+    if (landing) bottom.body.pushable = false;                  // don't push the lower player into the floor
+    return landing;
+  }
+
+  // ---------------------------------------------------------------- host: players
   addPlayer(id, name) {
-    const { spawn } = this.levelData;
-    const slot = this.players.size;
-    const hitbox = this.add.rectangle(spawn.x + slot * spawn.spacing, spawn.y - PLAYER_H / 2, PLAYER_W, PLAYER_H)
-      .setVisible(false);
-    this.physics.add.existing(hitbox);
-    hitbox.body.setCollideWorldBounds(true);
-    for (const solid of this.level.colliders()) this.physics.add.collider(hitbox, solid);
-    this.players.set(id, { name, hitbox, input: { ...EMPTY_INPUT }, facing: 1 });
+    const i = this.sims.size;
+    const role = ROLE_ORDER[i % ROLE_ORDER.length];              // temporary until lobby role assignment
+    const x = this.levelData.spawn.x + i * this.levelData.spawn.spacing;
+    this.sims.set(id, new PlayerSim(this, this.playerGroup, id, name, role, x, 440));
   }
 
   removePlayer(id) {
-    this.players.get(id)?.hitbox.destroy();
-    this.players.delete(id);
+    this.sims.get(id)?.destroy();
+    this.sims.delete(id);
     this.#removeView(id);
   }
 
-  setInput(id, input) {
-    const p = this.players.get(id);
-    if (!p || typeof input !== 'object' || input === null) return;
-    p.input = { left: !!input.left, right: !!input.right, jump: !!input.jump }; // never trust network data
-  }
+  setInput(id, input) { this.sims.get(id)?.setInput(input); }
 
-  // ---------- Guest API ----------
+  /** Developer role switch (keys 1–4). */
+  setRole(id, role) { this.sims.get(id)?.setRole(role); }
+
+  // ---------------------------------------------------------------- guest
   applySnapshot(msg) {
     if (!Array.isArray(msg.players)) return;
-    this.buffer.push(msg.ts, msg.players);
-    this.#applyWorldState(msg);
+    this.buffer.push(msg.ts, msg.players, performance.now(), msg.level?.ents);
+    this.level.applyState(msg.level);
+    for (const f of msg.fx ?? []) this.#playFx(f);
   }
 
-  // ---------- Loop ----------
-  update(_time, deltaMs) {
-    const input = this.#readLocalInput();
+  // ---------------------------------------------------------------- loop
+  update(time, deltaMs) {
+    const input = this.localInput.read();
+    const roleIdx = this.localInput.rolePressed();
+
     if (this.role === 'host') {
+      if (roleIdx >= 0) this.setRole(this.myId, ROLE_ORDER[roleIdx]);
       this.setInput(this.myId, input);
-      this.#stepHost(deltaMs / 1000);
+      this.#stepHost(time / 1000, deltaMs / 1000);
     } else {
+      if (roleIdx >= 0) this.net.send({ t: 'role', role: ROLE_ORDER[roleIdx] });
       const key = JSON.stringify(input);
       if (key !== this.lastSentInput) { this.net.send({ t: 'input', input }); this.lastSentInput = key; }
-      const players = this.buffer.sample();
-      if (players) this.#syncViews(players);
+      const frame = this.buffer.sampleAll();
+      if (frame) { this.#syncViews(frame.players); this.level.applyEntities(frame.ents); }
     }
+    this.level.draw(time);
+    this.#drawBeams();
   }
 
-  #stepHost(dt) {
-    for (const p of this.players.values()) {
-      const body = p.hitbox.body;
-      const dir = (p.input.right ? 1 : 0) - (p.input.left ? 1 : 0);
-      body.setVelocityX(dir * MOVE_SPEED);
-      if (dir) p.facing = dir;
-      if (p.input.jump && body.blocked.down) body.setVelocityY(-JUMP_SPEED);
+  #stepHost(now, dt) {
+    const players = [...this.sims.values()];
+    const fx = (type, x, y) => { const f = { type, x: Math.round(x), y: Math.round(y) }; this.pendingFx.push(f); this.#playFx(f); };
+    const ctx = { level: this.level, players, time: now, dt, fx };
+
+    for (const p of players) p.step(ctx);
+    this.#stepWorld(ctx);
+
+    for (const p of players) {
+      // Checkpoints + falling into pits.
+      for (const cx of this.levelData.checkpoints) if (p.x >= cx && cx > p.checkpoint) p.checkpoint = cx;
+      if (p.feet > this.levelData.height + 60) p.respawn();
     }
 
-    const world = this.#simulatePuzzle();
-    const players = this.#snapshotPlayers();
-    this.#syncViews(players); // host draws its own simulation directly (every frame)
-    this.#applyWorldState(world);
+    const snap = players.map((p) => p.snapshot());
+    this.#syncViews(snap);
+    const levelState = this.level.getState();
+    this.level.applyState(levelState);
 
-    // Carry leftover time over (instead of resetting to 0) so sends stay evenly spaced.
     this.snapshotTimer += dt;
     if (this.snapshotTimer >= 1 / SNAPSHOT_HZ) {
       this.snapshotTimer = Math.min(this.snapshotTimer - 1 / SNAPSHOT_HZ, 1 / SNAPSHOT_HZ);
-      const net = players.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) })); // round only on the wire
-      this.net.broadcast({ t: 'state', ts: performance.now(), players: net, ...world });
+      const net = snap.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) })); // round only on the wire
+      this.net.broadcast({ t: 'state', ts: performance.now(), players: net, level: levelState, fx: this.pendingFx });
+      this.pendingFx = [];
     }
   }
 
-  /** Host-only puzzle rules. Returns the dynamic world state to broadcast. */
-  #simulatePuzzle() {
-    const hitboxes = [...this.players.values()].map((p) => p.hitbox.getBounds());
-    const touching = (r) => {
-      const zone = new Phaser.Geom.Rectangle(r.x, r.y - 4, r.w, r.h + 4); // a bit above so standing counts
-      return hitboxes.some((b) => Intersects.RectangleToRectangle(b, zone));
-    };
-
-    const plates = this.levelData.plates.map(touching);
-    const anyPressed = plates.includes(true);
-    // Fairness: a gate never closes on top of a player standing in the doorway.
-    const gates = this.level.gates.map((g) => anyPressed || (g.open && touching(g.data)));
-
-    const finish = new Phaser.Geom.Rectangle(this.levelData.finish.x, this.levelData.finish.y,
-      this.levelData.finish.w, this.levelData.finish.h);
-    const complete = this.complete ||
-      (hitboxes.length > 0 && hitboxes.every((b) => Intersects.RectangleToRectangle(b, finish)));
-
-    return { plates, gates, complete };
-  }
-
-  #applyWorldState({ plates, gates, complete }) {
-    if (Array.isArray(plates)) plates.forEach((v, i) => this.level.setPlatePressed(i, !!v));
-    if (Array.isArray(gates)) gates.forEach((v, i) => this.level.setGateOpen(i, !!v));
-    if (complete && !this.complete) {
-      this.complete = true;
-      this.completeText.setVisible(true);
+  /** Host-only level rules: plates, nodes, gates, phantom platforms, crushers, wind, chain, breakables. */
+  #stepWorld({ level: L, players, time, dt }) {
+    // Heavy plates: only a (standing or planted) Anchor presses them.
+    L.plates.forEach((pl, i) => {
+      const zone = new Phaser.Geom.Rectangle(pl.data.x, pl.data.y - 6, pl.data.w, 14);
+      L.setPlatePressed(i, players.some((p) => p.role === 'anchor' && hit(p.bounds, zone)));
+    });
+    for (const n of L.nodes) n.lit = n.litUntil > time;
+    for (const p of L.phantom) {
+      p.lit = p.litUntil > time;
+      p.view.body.enable = p.lit;
     }
+    // Gates open while their plate is pressed or their node is lit. A gate never closes on a player.
+    L.gates.forEach((g, i) => {
+      const plate = L.plates.find((p) => p.data.opens === g.data.id);
+      const node = L.nodes.find((n) => n.data.opens === g.data.id);
+      const wantOpen = !!(plate?.pressed || node?.lit);
+      const blocked = players.some((p) => hit(p.bounds, new Phaser.Geom.Rectangle(g.data.x, g.data.y, g.data.w, g.data.h)));
+      L.setGateOpen(i, wantOpen || (g.open && blocked));
+    });
+
+    // Crushers: cycle down/up; a bracing Warden holds them up; anyone caught underneath respawns.
+    for (const c of L.crushers) {
+      c.t = (c.t + dt) % c.data.period;
+      const phase = c.t / c.data.period;                          // 0..1
+      const down = phase < 0.5 ? Math.min(1, phase * 4) : Math.max(0, 1 - (phase - 0.5) * 4);
+      let bottom = c.data.top + c.data.h + down * (460 - c.data.top - c.data.h);
+      const brace = players.find((p) => p.bracing && p.x > c.data.x && p.x < c.data.x + c.data.w);
+      if (brace) bottom = Math.min(bottom, brace.body.y - 10);
+      c.view.y = bottom - c.data.h / 2;
+      c.view.body.reset(c.view.x, c.view.y);
+      for (const p of players) {
+        if (p === brace || p.x < c.data.x || p.x > c.data.x + c.data.w) continue;
+        if (bottom > p.body.y + 6 && p.grounded) p.respawn();
+      }
+    }
+
+    // Wind gusts.
+    for (const w of L.wind) {
+      w.t = (w.t + dt) % (w.data.on + w.data.off);
+      w.active = w.t < w.data.on;
+    }
+
+    // Chain lifetime; it breaks if its Anchor un-plants.
+    if (L.chain) {
+      const owner = this.sims.get(L.chain.owner);
+      if (!owner || time > L.chain.until || (!owner.planted && !players.some((p) => p.ride))) L.chain = null;
+    }
+
+    // Fragile floors scheduled to break.
+    for (const f of L.fragile) if (f.breakAt && !f.broken && this.time.now >= f.breakAt) L.breakObject(f);
   }
 
-  #snapshotPlayers() {
-    return [...this.players].map(([id, p]) =>
-      ({ id, name: p.name, x: p.hitbox.x, y: p.hitbox.y, facing: p.facing }));
-  }
-
+  // ---------------------------------------------------------------- views + effects
   #syncViews(list) {
     const seen = new Set();
     for (const s of list) {
@@ -189,12 +249,35 @@ export class GameScene extends Phaser.Scene {
         const isMe = s.id === this.myId;
         view = new PlayerView(this, String(s.name).slice(0, 12), isMe);
         this.views.set(s.id, view);
-        if (isMe) this.cameras.main.startFollow(view, false, 0.1, 0.1); // no pixel snapping: smoother for non-pixel art
+        if (isMe) this.cameras.main.startFollow(view, false, 0.1, 0.1);
         this.onPlayers?.(list);
       }
-      view.applyState(s.x, s.y, s.facing === -1 ? -1 : 1);
+      view.applyState(s);
+      view.lastState = s;
     }
     for (const id of [...this.views.keys()]) if (!seen.has(id)) this.#removeView(id);
+  }
+
+  #drawBeams() {
+    const g = this.beamGfx.clear();
+    for (const v of this.views.values()) {
+      const s = v.lastState;
+      if (!s) continue;
+      if (Array.isArray(s.beam)) {
+        const [x1, y1, x2, y2] = s.beam;
+        g.lineStyle(10, 0xffffff, 0.12).lineBetween(x1, y1, x2, y2);
+        g.lineStyle(3, 0xffffff, 0.7).lineBetween(x1, y1, x2, y2);
+        g.fillStyle(0xffffff, 0.25).fillCircle(x2, y2, 10);
+      }
+      if (s.flare) g.fillStyle(0xffffff, 0.12).fillCircle(s.x, s.y - 20, 180);
+    }
+  }
+
+  #playFx({ type, x, y }) {
+    const ring = this.add.circle(x, y, 6).setStrokeStyle(2, 0xffffff, 0.8).setDepth(7);
+    const size = { slam: 90, smash: 50, flare: 60, throw: 30, yank: 30 }[type] ?? 30;
+    this.tweens.add({ targets: ring, radius: size, alpha: 0, duration: 350, onComplete: () => ring.destroy() });
+    if (type === 'slam' || type === 'smash') this.cameras.main.shake(120, 0.004);
   }
 
   #removeView(id) {

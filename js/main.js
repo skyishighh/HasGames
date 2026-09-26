@@ -52,7 +52,10 @@ async function startHost() {
   const net = new HostNet({
     onJoin: (id, name) => run((s) => s.addPlayer(id, name)),
     onLeave: (id) => run((s) => s.removePlayer(id)),
-    onMessage: (id, msg) => { if (msg?.t === 'input') run((s) => s.setInput(id, msg.input)); },
+    onMessage: (id, msg) => {
+      if (msg?.t === 'input') run((s) => s.setInput(id, msg.input));
+      else if (msg?.t === 'role' && typeof msg.role === 'string') run((s) => s.setRole(id, msg.role)); // dev role switch
+    },
   });
   const code = await net.start();
   scene = await bootGame(code, { role: 'host', net, myId: HOST_ID, myName: playerName() });
