@@ -37,6 +37,66 @@ Each role belongs to a character with their own real-world room in the prologue.
 
 Every puzzle may assume all four abilities are present.
 
+### Controls (keyboard)
+
+| Key | Everyone |
+|---|---|
+| A / D (← / →) | Move |
+| W / Space (↑) | Jump |
+| S (↓) | Crouch / drop through thin platforms |
+| E | Interact: levers, buttons, ledges; **hold** to rescue a Taken teammate |
+| J | Role ability 1 |
+| K | Role ability 2 (not every role) |
+
+- **Shared co-op move:** any player can stand on a teammate's head.
+- **No HUD text:** ability state is shown on the character (e.g. Weaver's hand glow = light energy).
+- All numbers below are **starting values** to tune in playtesting.
+
+### Scout — agility (speed 250, fastest)
+| Input | Ability |
+|---|---|
+| W at a wall | **Wall-jump** off the wall (climb shafts by bouncing wall to wall) |
+| Hold W on mesh | **Climb** vertical mesh / fences / grates |
+| S while moving | **Crawl** through small vents only the Scout fits |
+| J | **Dash**: short burst, can cross a small gap mid-air |
+| K | — |
+Weak: blown by wind; cannot push or lift heavy objects. Team role: high switches, opening gates from the other side, luring Tracers.
+
+### Warden — strength (speed 180, slowest, lowest jump)
+| Input | Ability |
+|---|---|
+| Walk into heavy block | **Push** blocks nobody else can move |
+| J near object | **Grab & lift**; J again to **throw** |
+| J while running | **Smash** cracked walls and weak floors |
+| Hold J under something | **Brace** falling pillars, closing doors, crushers for a few seconds |
+| K next to teammate | **Throw a teammate** upward or across a gap |
+Weak: too big for vents; breaks fragile floors by weight. Team role: force paths open, hold dangers back, launch teammates.
+
+### Weaver — light (speed 210)
+| Input | Ability |
+|---|---|
+| Hold J + arrows (8 directions) | **Light beam**; drains energy (hand glow), recharges when off |
+| Beam on a circuit node | **Power** doors, lifts, bridges while lit |
+| Beam on phantom platforms | Platforms are **solid only while lit** (hold anyone) |
+| Beam at Eaters / Hollow | **Repel** them briefly |
+| K | **Flare**: bright flash in all directions, high energy cost |
+Weak: no physical strength; light attracts Watchers. Team role: create paths, power machinery, protect in the dark.
+
+### Anchor — weight (speed 190, short jump)
+| Input | Ability |
+|---|---|
+| J on ground | **Plant**: immovable vs wind, water, grabs; J again to release |
+| While planted | **Living pillar**: teammates can stand on / hold on and are protected |
+| Stand on large plate | **Heavy plates** only the Anchor can press |
+| J in mid-air | **Slam**: heavy landing that stuns nearby Tracers |
+| K while planted, near hook | **Chain tether** to a hook; teammates climb/slide along it |
+| K aimed at teammate | **Yank** teammate toward the Anchor (save from falls, pull across gaps) |
+Weak: slow, short jump, cannot move while planted. Team role: safety in wind/water/chases, rope paths.
+Tech note: the chain starts as a **straight max-length constraint** (no rope simulation); upgrade to Matter.js ropes only if needed.
+
+### Example — "The Vault Door" (Act III)
+Anchor plants on the heavy plate → Weaver powers the lock node → Scout climbs the mesh and pulls the release lever → Warden braces the rising seal → all four pass through.
+
 ---
 
 ## 3. Story (Acts)
@@ -157,6 +217,7 @@ When a player is killed by a threat or hazard, they are **Taken**, not removed:
 | Narrative delivery | Wordless gameplay + scripted set pieces; text allowed in prologue and comic-panel epilogue |
 | Death | "Taken" + teammate rescue with a timer; team restarts at checkpoint on failure |
 | Communication | External (Discord or similar); no in-game voice/chat/pings |
+| Controls & abilities | See §2 (keyboard: A/D, W/Space, S, E, J, K) |
 | Prologue | Playable, per-character rooms (text allowed) |
 | Main threat | The Hollow (hunt isolated players) |
 | Area threats | Watchers, Eaters, Tracers, Overflow, Collector; final: Codex Core |
@@ -164,6 +225,6 @@ When a player is killed by a threat or hazard, they are **Taken**, not removed:
 ## 8. OPEN Questions
 - Checkpoint placement rules, and which hazards are instant team restarts.
 - Exact list and order of Act IV areas; set piece per area.
-- Weaver/Anchor abilities in detail (ranges, cooldowns, controls).
+- Exact ranges, cooldowns and energy values for abilities (tune in playtesting).
 - Character art style prompt and the AI art pipeline.
 - Final game title.
