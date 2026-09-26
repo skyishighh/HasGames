@@ -1,13 +1,14 @@
 // Main gameplay scene. The same scene runs on host and guests:
 //  - host:  owns Arcade Physics bodies, applies everyone's input, runs puzzle
 //           logic and broadcasts snapshots
-//  - guest: has no physics; only sends input and draws the latest snapshot
+//  - guest: has no physics; only sends input and draws interpolated snapshots
 import {
   WIDTH, HEIGHT, GRAVITY, MOVE_SPEED, JUMP_SPEED, PLAYER_W, PLAYER_H, SNAPSHOT_HZ,
 } from '../config.js';
 import { PlayerView } from '../objects/PlayerView.js';
 import { Level } from '../world/Level.js';
 import level1 from '../levels/level1.js';
+import { SnapshotBuffer } from '../snapshot-buffer.js';
 
 const EMPTY_INPUT = { left: false, right: false, jump: false };
 const Intersects = Phaser.Geom.Intersects;
@@ -27,6 +28,7 @@ export class GameScene extends Phaser.Scene {
     this.players = new Map(); // host only: id -> { name, hitbox, input, facing }
     this.snapshotTimer = 0;
     this.lastSentInput = '';
+    this.buffer = new SnapshotBuffer(); // guest only
     this.complete = false;
   }
 
@@ -102,7 +104,7 @@ export class GameScene extends Phaser.Scene {
   // ---------- Guest API ----------
   applySnapshot(msg) {
     if (!Array.isArray(msg.players)) return;
-    this.#syncViews(msg.players);
+    this.buffer.push(msg.ts, msg.players);
     this.#applyWorldState(msg);
   }
 
@@ -115,6 +117,8 @@ export class GameScene extends Phaser.Scene {
     } else {
       const key = JSON.stringify(input);
       if (key !== this.lastSentInput) { this.net.send({ t: 'input', input }); this.lastSentInput = key; }
+      const players = this.buffer.sample();
+      if (players) this.#syncViews(players);
     }
   }
 
@@ -132,10 +136,12 @@ export class GameScene extends Phaser.Scene {
     this.#syncViews(players); // host draws its own simulation directly (every frame)
     this.#applyWorldState(world);
 
+    // Carry leftover time over (instead of resetting to 0) so sends stay evenly spaced.
     this.snapshotTimer += dt;
     if (this.snapshotTimer >= 1 / SNAPSHOT_HZ) {
-      this.snapshotTimer = 0;
-      this.net.broadcast({ t: 'state', players, ...world });
+      this.snapshotTimer = Math.min(this.snapshotTimer - 1 / SNAPSHOT_HZ, 1 / SNAPSHOT_HZ);
+      const net = players.map((p) => ({ ...p, x: Math.round(p.x), y: Math.round(p.y) })); // round only on the wire
+      this.net.broadcast({ t: 'state', ts: performance.now(), players: net, ...world });
     }
   }
 
@@ -171,7 +177,7 @@ export class GameScene extends Phaser.Scene {
 
   #snapshotPlayers() {
     return [...this.players].map(([id, p]) =>
-      ({ id, name: p.name, x: Math.round(p.hitbox.x), y: Math.round(p.hitbox.y), facing: p.facing }));
+      ({ id, name: p.name, x: p.hitbox.x, y: p.hitbox.y, facing: p.facing }));
   }
 
   #syncViews(list) {
@@ -183,7 +189,7 @@ export class GameScene extends Phaser.Scene {
         const isMe = s.id === this.myId;
         view = new PlayerView(this, String(s.name).slice(0, 12), isMe);
         this.views.set(s.id, view);
-        if (isMe) this.cameras.main.startFollow(view, true, 0.1, 0.1);
+        if (isMe) this.cameras.main.startFollow(view, false, 0.1, 0.1); // no pixel snapping: smoother for non-pixel art
         this.onPlayers?.(list);
       }
       view.applyState(s.x, s.y, s.facing === -1 ? -1 : 1);

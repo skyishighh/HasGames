@@ -28,7 +28,9 @@ function bootGame(code, sceneData) {
       height: HEIGHT,
       backgroundColor: '#000000',
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
-      physics: { default: 'arcade', arcade: { debug: false } },
+      // fixedStep: false -> one physics step per rendered frame, so motion matches the
+      // monitor's refresh rate (no 0/2-step stutter). Only the host simulates.
+      physics: { default: 'arcade', arcade: { debug: false, fixedStep: false } },
       scene: [],
     });
     // The scene calls onReady at the end of create(); listening for its 'create'
