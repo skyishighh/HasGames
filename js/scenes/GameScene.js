@@ -1,12 +1,16 @@
 // Main gameplay scene. The same scene runs on host and guests:
-//  - host:  owns Arcade Physics bodies, applies everyone's input, broadcasts snapshots
+//  - host:  owns Arcade Physics bodies, applies everyone's input, runs puzzle
+//           logic and broadcasts snapshots
 //  - guest: has no physics; only sends input and draws the latest snapshot
 import {
-  WIDTH, HEIGHT, GROUND_Y, GRAVITY, MOVE_SPEED, JUMP_SPEED, PLAYER_W, PLAYER_H, SNAPSHOT_HZ,
+  WIDTH, HEIGHT, GRAVITY, MOVE_SPEED, JUMP_SPEED, PLAYER_W, PLAYER_H, SNAPSHOT_HZ,
 } from '../config.js';
 import { PlayerView } from '../objects/PlayerView.js';
+import { Level } from '../world/Level.js';
+import level1 from '../levels/level1.js';
 
 const EMPTY_INPUT = { left: false, right: false, jump: false };
+const Intersects = Phaser.Geom.Intersects;
 
 export class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
@@ -23,24 +27,33 @@ export class GameScene extends Phaser.Scene {
     this.players = new Map(); // host only: id -> { name, hitbox, input, facing }
     this.snapshotTimer = 0;
     this.lastSentInput = '';
+    this.complete = false;
   }
 
   create() {
+    const isHost = this.role === 'host';
+    this.levelData = level1;
+
     this.#createBackground();
-    this.ground = this.add.rectangle(WIDTH / 2, GROUND_Y + (HEIGHT - GROUND_Y) / 2, WIDTH, HEIGHT - GROUND_Y, 0x050505);
+    this.level = new Level(this, this.levelData, isHost);
+    this.cameras.main.setBounds(0, 0, this.levelData.width, this.levelData.height);
+    this.completeText = this.add.text(WIDTH / 2, HEIGHT / 3, 'Level complete', {
+      fontFamily: 'system-ui, sans-serif', fontSize: '36px', color: '#eeeeee',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(10).setVisible(false);
 
     const kb = this.input.keyboard;
     this.keys = kb.addKeys('A,D,W,SPACE');
     this.cursors = kb.createCursorKeys();
 
-    if (this.role === 'host') {
+    if (isHost) {
       this.physics.world.gravity.y = GRAVITY;
-      this.physics.add.existing(this.ground, true); // static body
+      this.physics.world.setBounds(0, 0, this.levelData.width, this.levelData.height);
       this.addPlayer(this.myId, this.myName);
     }
     this.onReady?.(this);
   }
 
+  /** Fixed backdrop (does not scroll with the camera). */
   #createBackground() {
     const tex = this.textures.createCanvas('bg', WIDTH, HEIGHT);
     const ctx = tex.getContext();
@@ -50,7 +63,7 @@ export class GameScene extends Phaser.Scene {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     tex.refresh();
-    this.add.image(0, 0, 'bg').setOrigin(0);
+    this.add.image(0, 0, 'bg').setOrigin(0).setScrollFactor(0);
   }
 
   #readLocalInput() {
@@ -64,12 +77,13 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- Host API (called from net callbacks) ----------
   addPlayer(id, name) {
+    const { spawn } = this.levelData;
     const slot = this.players.size;
-    const hitbox = this.add.rectangle(120 + slot * 50 + PLAYER_W / 2, GROUND_Y - PLAYER_H / 2, PLAYER_W, PLAYER_H)
+    const hitbox = this.add.rectangle(spawn.x + slot * spawn.spacing, spawn.y - PLAYER_H / 2, PLAYER_W, PLAYER_H)
       .setVisible(false);
     this.physics.add.existing(hitbox);
     hitbox.body.setCollideWorldBounds(true);
-    this.physics.add.collider(hitbox, this.ground);
+    for (const solid of this.level.colliders()) this.physics.add.collider(hitbox, solid);
     this.players.set(id, { name, hitbox, input: { ...EMPTY_INPUT }, facing: 1 });
   }
 
@@ -86,9 +100,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- Guest API ----------
-  applySnapshot(list) {
-    if (!Array.isArray(list)) return;
-    this.#syncViews(list);
+  applySnapshot(msg) {
+    if (!Array.isArray(msg.players)) return;
+    this.#syncViews(msg.players);
+    this.#applyWorldState(msg);
   }
 
   // ---------- Loop ----------
@@ -112,17 +127,49 @@ export class GameScene extends Phaser.Scene {
       if (p.input.jump && body.blocked.down) body.setVelocityY(-JUMP_SPEED);
     }
 
-    const snap = this.#snapshot();
-    this.#syncViews(snap); // host draws its own simulation directly (every frame)
+    const world = this.#simulatePuzzle();
+    const players = this.#snapshotPlayers();
+    this.#syncViews(players); // host draws its own simulation directly (every frame)
+    this.#applyWorldState(world);
 
     this.snapshotTimer += dt;
     if (this.snapshotTimer >= 1 / SNAPSHOT_HZ) {
       this.snapshotTimer = 0;
-      this.net.broadcast({ t: 'state', players: snap });
+      this.net.broadcast({ t: 'state', players, ...world });
     }
   }
 
-  #snapshot() {
+  /** Host-only puzzle rules. Returns the dynamic world state to broadcast. */
+  #simulatePuzzle() {
+    const hitboxes = [...this.players.values()].map((p) => p.hitbox.getBounds());
+    const touching = (r) => {
+      const zone = new Phaser.Geom.Rectangle(r.x, r.y - 4, r.w, r.h + 4); // a bit above so standing counts
+      return hitboxes.some((b) => Intersects.RectangleToRectangle(b, zone));
+    };
+
+    const plates = this.levelData.plates.map(touching);
+    const anyPressed = plates.includes(true);
+    // Fairness: a gate never closes on top of a player standing in the doorway.
+    const gates = this.level.gates.map((g) => anyPressed || (g.open && touching(g.data)));
+
+    const finish = new Phaser.Geom.Rectangle(this.levelData.finish.x, this.levelData.finish.y,
+      this.levelData.finish.w, this.levelData.finish.h);
+    const complete = this.complete ||
+      (hitboxes.length > 0 && hitboxes.every((b) => Intersects.RectangleToRectangle(b, finish)));
+
+    return { plates, gates, complete };
+  }
+
+  #applyWorldState({ plates, gates, complete }) {
+    if (Array.isArray(plates)) plates.forEach((v, i) => this.level.setPlatePressed(i, !!v));
+    if (Array.isArray(gates)) gates.forEach((v, i) => this.level.setGateOpen(i, !!v));
+    if (complete && !this.complete) {
+      this.complete = true;
+      this.completeText.setVisible(true);
+    }
+  }
+
+  #snapshotPlayers() {
     return [...this.players].map(([id, p]) =>
       ({ id, name: p.name, x: Math.round(p.hitbox.x), y: Math.round(p.hitbox.y), facing: p.facing }));
   }
@@ -133,8 +180,10 @@ export class GameScene extends Phaser.Scene {
       seen.add(s.id);
       let view = this.views.get(s.id);
       if (!view) {
-        view = new PlayerView(this, String(s.name).slice(0, 12), s.id === this.myId);
+        const isMe = s.id === this.myId;
+        view = new PlayerView(this, String(s.name).slice(0, 12), isMe);
         this.views.set(s.id, view);
+        if (isMe) this.cameras.main.startFollow(view, true, 0.1, 0.1);
         this.onPlayers?.(list);
       }
       view.applyState(s.x, s.y, s.facing === -1 ? -1 : 1);
@@ -147,8 +196,6 @@ export class GameScene extends Phaser.Scene {
     if (!view) return;
     view.destroy();
     this.views.delete(id);
-    this.onPlayers?.(this.#snapshotNames());
+    this.onPlayers?.([...this.views.values()].map((v) => ({ name: v.label.text })));
   }
-
-  #snapshotNames() { return [...this.views.values()].map((v) => ({ name: v.label.text })); }
 }

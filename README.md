@@ -17,4 +17,6 @@ ES modules need a web server (opening `index.html` as a file won't work):
 - `js/background-ticker.js` + `js/tick-worker.js` – keep the host simulating while its tab is hidden
 - `js/config.js`             – shared gameplay constants
 - `js/scenes/GameScene.js`   – gameplay: host runs Arcade Physics, guests render snapshots
+- `js/world/Level.js`         – builds a level from data (visuals everywhere, physics on host)
+- `js/levels/level1.js`       – level data: platforms, plates, gates, finish zone
 - `js/objects/PlayerView.js` – player visuals (separate from the physics hitbox)

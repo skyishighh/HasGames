@@ -66,7 +66,7 @@ async function startGuest() {
   let scene = null, rejected = null;
   const net = new GuestNet({
     onMessage: (msg) => {
-      if (msg?.t === 'state') scene?.applySnapshot(msg.players); // snapshots before boot are simply skipped
+      if (msg?.t === 'state') scene?.applySnapshot(msg); // snapshots before boot are simply skipped
       else if (msg?.t === 'reject') rejected = msg.reason;
     },
     onClose: () => { alert(rejected || 'Disconnected from host.'); location.reload(); },
