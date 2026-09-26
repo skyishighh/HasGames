@@ -10,10 +10,11 @@ const T = {
   wallJumpX: 280, wallJumpY: 560, wallLock: 0.18, wallSlide: 120,
   climbSpeed: 150, climbSide: 110, crawlSpeed: 140,
   dashSpeed: 620, dashTime: 0.15, dashCooldown: 0.6,
-  liftRange: 40, throwCrateX: 420, throwCrateY: 320, smashRange: 40,
+  liftRange: 40, throwCrateX: 420, throwCrateY: 600, smashRange: 40,
   throwMateRange: 60, throwMateX: 260, throwMateY: 820,
   beamLength: 360, energyDrain: 30, energyRegen: 22, regenDelay: 0.5, flareCost: 40, flareRadius: 180,
-  slamSpeed: 900, chainRange: 320, chainLife: 10, yankRange: 280, yankSpeed: 700,
+  beamWalk: 0.6, phantomLinger: 1.2, nodeTolerance: 18, burnoutRecover: 30,
+  slamSpeed: 700, maxFall: 900, chainRange: 320, chainLife: 10, yankRange: 280, yankSpeed: 700,
   rideSpeed: 420, dropTime: 0.25,
   jumpBuffer: 0.12, coyote: 0.08, wallGrace: 0.1,
 };
@@ -27,6 +28,7 @@ function distToSegment(px, py, x1, y1, x2, y2) {
 }
 
 export class PlayerSim {
+  /** checkpoint: { x, y } feet position used for respawns. */
   constructor(scene, group, id, name, role, x, feetY) {
     this.scene = scene;
     this.group = group;
@@ -35,7 +37,7 @@ export class PlayerSim {
     this.facing = 1;
     this.input = { ...EMPTY_INPUT };
     this.pressed = {};           // edge flags, consumed once per step
-    this.checkpoint = x;
+    this.checkpoint = { x, y: feetY };
     this.#resetState();
     this.#createHitbox(role, x, feetY);
   }
@@ -48,6 +50,7 @@ export class PlayerSim {
     this.carrying = null;        // crate object (Warden)
     this.bracing = false;
     this.energy = 100; this.sinceBeam = 99;
+    this.burnout = false;        // Weaver: light ran out; unusable until it recharges a bit
     this.beam = null;            // { x1, y1, x2, y2 } (Weaver)
     this.flareT = 0;
     this.planted = false;
@@ -69,6 +72,8 @@ export class PlayerSim {
     this.hitbox.sim = this;
     this.group.add(this.hitbox);
     this.hitbox.body.setCollideWorldBounds(true);
+    // Terminal velocity: keeps per-frame movement small so fast falls can't pass through thin floors.
+    this.hitbox.body.setMaxVelocityY(T.maxFall);
   }
 
   get body() { return this.hitbox.body; }
@@ -101,8 +106,10 @@ export class PlayerSim {
   respawn() {
     this.#dropCarried();
     this.#setPlanted(false);
+    this.body.setSize(this.stats.w, this.stats.h, false).setOffset(0, 0);   // leave any crouch hitbox
+    this.body.setAllowGravity(true);
     this.#resetState();
-    this.body.reset(this.checkpoint, 300);
+    this.body.reset(this.checkpoint.x, this.checkpoint.y - this.stats.h / 2 - 2);
   }
 
   // ---------------------------------------------------------------- step
@@ -262,9 +269,9 @@ export class PlayerSim {
       }
     }
 
-    // Hold J under a crusher: brace it.
+    // Hold J under (or stepping under) a crusher: brace it.
     if (inp.a1) {
-      const crusher = level.crushers.find((k) => this.x > k.data.x && this.x < k.data.x + k.data.w);
+      const crusher = level.crushers.find((k) => body.right > k.data.x - 4 && body.x < k.data.x + k.data.w + 4);
       if (crusher) this.bracing = true;
     }
 
@@ -305,12 +312,18 @@ export class PlayerSim {
     }
     if (this.flareT > 0) this.#lightCircle(level, ctx.time, this.x, body.center.y, T.flareRadius);
 
-    // Hold J: beam aimed with the direction keys; the Weaver stands still while casting.
-    if (inp.a1 && this.energy > 0) {
-      let ax = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-      const ay = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+    // Running dry burns the light out until it recharges to burnoutRecover.
+    if (this.energy <= 0) this.burnout = true;
+    if (this.burnout && this.energy >= T.burnoutRecover) this.burnout = false;
+
+    // Hold J: beam aimed with the arrow keys (default: straight ahead) while walking slowly with A/D.
+    if (inp.a1 && !this.burnout) {
+      let ax = (inp.aimR ? 1 : 0) - (inp.aimL ? 1 : 0);
+      const ay = (inp.aimD ? 1 : 0) - (inp.aimU ? 1 : 0);
       if (!ax && !ay) ax = this.facing;
-      if (ax) this.facing = ax;
+      const walk = (inp.moveR ? 1 : 0) - (inp.moveL ? 1 : 0);
+      if (walk) this.facing = walk;
+      else if (ax) this.facing = ax;
       const len = Math.hypot(ax, ay);
       const x1 = this.x, y1 = body.y + 14;
       const end = this.#castRay(level, x1, y1, ax / len, ay / len, T.beamLength);
@@ -318,7 +331,7 @@ export class PlayerSim {
       this.#lightLine(level, ctx.time, this.beam);
       this.energy = Math.max(0, this.energy - T.energyDrain * dt);
       this.sinceBeam = 0;
-      body.setVelocityX(0);
+      body.setVelocityX(walk * this.stats.speed * T.beamWalk);
       return true;
     }
     if (this.sinceBeam > T.regenDelay) this.energy = Math.min(100, this.energy + T.energyRegen * dt);
@@ -328,7 +341,7 @@ export class PlayerSim {
   /** March along the ray until it hits solid level geometry. */
   #castRay(level, x, y, dx, dy, max) {
     const solids = level.data.solids;
-    const closedGates = level.gates.filter((g) => !g.open).map((g) => g.data);
+    const closedGates = level.gates.filter((g) => !g.open && !g.bridge).map((g) => g.data);
     const blockers = [...solids, ...closedGates, ...level.cracked.filter((c) => !c.broken).map((c) => c.data)];
     for (let d = 0; d <= max; d += 6) {
       const px = x + dx * d, py = y + dy * d;
@@ -340,10 +353,10 @@ export class PlayerSim {
   #lightLine(level, time, b) {
     const line = new Phaser.Geom.Line(b.x1, b.y1, b.x2, b.y2);
     for (const n of level.nodes) {
-      if (distToSegment(n.data.x, n.data.y, b.x1, b.y1, b.x2, b.y2) < 12) n.litUntil = time + 0.15;
+      if (distToSegment(n.data.x, n.data.y, b.x1, b.y1, b.x2, b.y2) < T.nodeTolerance) n.litUntil = time + 0.15;
     }
     for (const p of level.phantom) {
-      if (Phaser.Geom.Intersects.LineToRectangle(line, new Rect(p.data.x, p.data.y - 4, p.data.w, p.data.h + 8))) p.litUntil = time + 0.4;
+      if (Phaser.Geom.Intersects.LineToRectangle(line, new Rect(p.data.x, p.data.y - 4, p.data.w, p.data.h + 8))) p.litUntil = time + T.phantomLinger;
     }
   }
 
@@ -351,7 +364,7 @@ export class PlayerSim {
     for (const n of level.nodes) if (Phaser.Math.Distance.Between(x, y, n.data.x, n.data.y) < r) n.litUntil = time + 0.15;
     for (const p of level.phantom) {
       const cx = Phaser.Math.Clamp(x, p.data.x, p.data.x + p.data.w), cy = Phaser.Math.Clamp(y, p.data.y, p.data.y + p.data.h);
-      if (Phaser.Math.Distance.Between(x, y, cx, cy) < r) p.litUntil = time + 0.4;
+      if (Phaser.Math.Distance.Between(x, y, cx, cy) < r) p.litUntil = time + T.phantomLinger;
     }
   }
 

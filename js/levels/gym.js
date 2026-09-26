@@ -41,7 +41,7 @@ export default {
   blocks: [{ id: 'b1', x: 1880, y: G - 60, w: 60, h: 60 }], // heavy: Warden only
   crates: [{ id: 'c1', x: 2280, y: G - 20 }],              // light: Warden lifts/throws
   cracked: [{ id: 'w1', x: 2420, y: G - 130, w: 24, h: 130 }],
-  fragile: [{ id: 'f1', x: 2500, y: G, w: 120, h: 12 }],   // bridge that breaks under the Warden
+  fragile: [{ id: 'f1', x: 2500, y: G, w: 120, h: 16 }],   // bridge that breaks under the Warden
   crushers: [{ id: 'k1', x: 2760, w: 80, h: 60, top: 250, period: 3 }],
 
   wind: [{ x: 3000, y: 200, w: 260, h: 260, push: -320, on: 1.6, off: 1.1 }],
@@ -54,8 +54,8 @@ export default {
 
   nodes: [{ id: 'n1', x: 4110, y: 280, opens: 'g2' }],     // Weaver powers while lit
   phantom: [
-    { id: 'ph1', x: 4330, y: 430, w: 60, h: 12 },
-    { id: 'ph2', x: 4410, y: 410, w: 60, h: 12 },
-    { id: 'ph3', x: 4490, y: 430, w: 60, h: 12 },
+    { id: 'ph1', x: 4330, y: 430, w: 60, h: 16 },
+    { id: 'ph2', x: 4410, y: 410, w: 60, h: 16 },
+    { id: 'ph3', x: 4490, y: 430, w: 60, h: 16 },
   ],
 };

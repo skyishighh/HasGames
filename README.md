@@ -30,7 +30,10 @@ Developer only (test build):
 - `js/player/input.js`          – keyboard → input state
 - `js/scenes/GameScene.js`      – host runs physics, level rules and snapshots; guests render them
 - `js/world/Level.js`           – builds a level from data (visuals everywhere, physics on host)
-- `js/levels/gym.js`            – Ability Gym: one test station per ability
+- `js/levels/awakening.js`      – Act II Solo Awakening (default level)
+- `js/levels/gym.js`            – Ability Gym: one test station per ability (open with `?level=gym`)
+- `js/world/Atmosphere.js`      – darkness + light, fog, grain, vignette
+- `js/world/Scripted.js`        – Hollow glimpses, camera reveal, scripted triggers
 - `js/objects/PlayerView.js`    – role silhouettes (separate from physics hitboxes)
 - `js/snapshot-buffer.js`       – guest-side interpolation of players and movable objects
 - `js/background-ticker.js` + `js/tick-worker.js` – keep the host simulating while its tab is hidden

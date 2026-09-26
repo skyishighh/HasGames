@@ -14,6 +14,8 @@ export const SPRINT_MULT = 1.45;
 export const EMPTY_INPUT = {
   left: false, right: false, up: false, down: false,
   jump: false, interact: false, a1: false, a2: false, sprint: false,
+  // Separate key groups for the Weaver: walk with A/D while aiming with the arrow keys.
+  moveL: false, moveR: false, aimL: false, aimR: false, aimU: false, aimD: false,
 };
 /** Buttons whose *press* (not hold) matters; host detects presses per player. */
 export const EDGE_KEYS = ['jump', 'interact', 'a1', 'a2'];

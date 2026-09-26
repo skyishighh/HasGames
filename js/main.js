@@ -6,6 +6,8 @@ import { keepRunningWhenHidden } from './background-ticker.js';
 
 const $ = (id) => document.getElementById(id);
 const HOST_ID = 'host';
+// Level to play: ?level=gym opens the Ability Gym (developer test room); default is the Awakening.
+const LEVEL_KEY = new URLSearchParams(location.search).get('level') === 'gym' ? 'gym' : 'awakening';
 
 function setStatus(text) { $('status').textContent = text; }
 function playerName() { return $('name').value.trim() || 'Player'; }
@@ -50,7 +52,10 @@ async function startHost() {
   const run = (fn) => (scene ? fn(scene) : pending.push(fn));
 
   const net = new HostNet({
-    onJoin: (id, name) => run((s) => s.addPlayer(id, name)),
+    onJoin: (id, name) => {
+      net.send(id, { t: 'welcome', level: LEVEL_KEY });   // guests load the host's level
+      run((s) => s.addPlayer(id, name));
+    },
     onLeave: (id) => run((s) => s.removePlayer(id)),
     onMessage: (id, msg) => {
       if (msg?.t === 'input') run((s) => s.setInput(id, msg.input));
@@ -60,7 +65,7 @@ async function startHost() {
     },
   });
   const code = await net.start();
-  scene = await bootGame(code, { role: 'host', net, myId: HOST_ID, myName: playerName() });
+  scene = await bootGame(code, { role: 'host', net, myId: HOST_ID, myName: playerName(), levelKey: LEVEL_KEY });
   pending.forEach((fn) => fn(scene));
 }
 
@@ -70,17 +75,20 @@ async function startGuest() {
   if (code.length !== 5) return setStatus('Enter the 5-letter room code.');
   setStatus('Joining…');
 
-  let scene = null, rejected = null;
+  let scene = null, rejected = null, gotWelcome;
+  const welcome = new Promise((resolve) => { gotWelcome = resolve; });
   const net = new GuestNet({
     onMessage: (msg) => {
-      if (msg?.t === 'state') scene?.applySnapshot(msg); // snapshots before boot are simply skipped
+      if (msg?.t === 'welcome') gotWelcome(msg.level);
+      else if (msg?.t === 'state') scene?.applySnapshot(msg); // snapshots before boot are simply skipped
       else if (msg?.t === 'control' && typeof msg.id === 'string') scene?.setLocalControl(msg.id);
       else if (msg?.t === 'reject') rejected = msg.reason;
     },
     onClose: () => { alert(rejected || 'Disconnected from host.'); location.reload(); },
   });
   const myId = await net.join(code, playerName());
-  scene = await bootGame(code, { role: 'guest', net, myId, myName: playerName() });
+  const levelKey = await welcome;
+  scene = await bootGame(code, { role: 'guest', net, myId, myName: playerName(), levelKey });
 }
 
 function onError(err) {

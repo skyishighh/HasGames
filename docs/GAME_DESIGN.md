@@ -99,8 +99,12 @@ Tech note: the chain starts as a **straight max-length constraint** (no rope sim
 - **Jump buffering** (0.12 s): a jump pressed just before landing still happens.
 - **Coyote time** (0.08 s): a jump pressed just after running off an edge still counts.
 - **Wall grace** (0.1 s, Scout): wall contact counts briefly after touching, so wall-jumps are reliable.
-- Weaver stands still while casting the beam (the direction keys aim it).
+- Weaver: while holding J the Weaver walks slowly (60 %) with A/D and aims with the arrow keys. Emptying the light causes a **burnout**: no beam until it recharges to 30 %. Lit phantom platforms stay solid for 1.2 s after the light leaves them.
+- Terminal fall speed (900 px/s) and minimum 16 px thickness for thin/breakable floors prevent falling through them.
 - A player holding onto a planted Anchor (within ~40 px) is sheltered from wind.
+
+### Solo Awakening (implemented: `js/levels/awakening.js`, the default level)
+Four separated zones around a central chasm; each role spawns in its own zone and ends on a viewing platform where the camera pulls back to reveal the other three. Scout: rocks, crawl under a pipe, wall-jump shafts (90 px and 60 px wide, second entered by crawling), mesh, practice gap, sprint+dash gap. Warden: push block, throw crate onto a switch, smash, a harmless slow crusher then a real one (brace), cracked floor drop. Anchor: wind gusts (plant), latching heavy plate lowers a drawbridge, slam breaks debris into a tunnel. Weaver: darkness, beam reveals the path, node opens a latched door, phantom bridges with a light-energy lesson, flare scare. One Hollow glimpse per zone. Open the Ability Gym with `?level=gym`.
 
 ### Implementation status
 All four roles are implemented in the **Ability Gym** (`js/levels/gym.js`), a developer test level with one station per ability. Keys 1–4 switch roles for testing. Not yet implemented: Weaver repel on threats (no threats exist yet), Anchor slam stun (no Tracers yet), Warden brace on doors (only crushers so far).

@@ -8,8 +8,13 @@ import { PlayerView } from '../objects/PlayerView.js';
 import { PlayerSim } from '../player/PlayerSim.js';
 import { LocalInput } from '../player/input.js';
 import { Level } from '../world/Level.js';
+import { Atmosphere } from '../world/Atmosphere.js';
+import { Scripted } from '../world/Scripted.js';
 import { SnapshotBuffer } from '../snapshot-buffer.js';
 import gym from '../levels/gym.js';
+import awakening from '../levels/awakening.js';
+
+const LEVELS = { gym, awakening };
 
 const hit = Phaser.Geom.Intersects.RectangleToRectangle;
 /** Arcade may pass collider arguments in either order; return [player, other]. */
@@ -18,8 +23,9 @@ const split = (a, b) => (a.sim ? [a, b] : [b, a]);
 export class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
 
-  /** data: { role: 'host'|'guest', net, myId, myName, onPlayers(list), onReady(scene) } */
+  /** data: { role: 'host'|'guest', net, myId, myName, levelKey, onPlayers(list), onReady(scene) } */
   init(data) {
+    this.levelKey = LEVELS[data.levelKey] ? data.levelKey : 'awakening';
     this.role = data.role;
     this.net = data.net;
     this.myId = data.myId;
@@ -39,9 +45,11 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     const isHost = this.role === 'host';
-    this.levelData = gym;
+    this.levelData = LEVELS[this.levelKey];
     this.#createBackground();
     this.level = new Level(this, this.levelData, isHost);
+    this.atmosphere = new Atmosphere(this, this.level);
+    this.scripted = new Scripted(this, this.levelData);
     this.cameras.main.setBounds(0, 0, this.levelData.width, this.levelData.height);
     this.beamGfx = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
     this.localInput = new LocalInput(this);
@@ -66,7 +74,7 @@ export class GameScene extends Phaser.Scene {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     tex.refresh();
-    this.add.image(0, 0, 'bg').setOrigin(0).setScrollFactor(0).setDepth(-10);
+    this.bg = this.add.image(WIDTH / 2, HEIGHT / 2, 'bg').setScrollFactor(0).setDepth(-10);
   }
 
   // ---------------------------------------------------------------- host: physics wiring
@@ -74,7 +82,8 @@ export class GameScene extends Phaser.Scene {
     const L = this.level, P = this.playerGroup, phys = this.physics;
     const movables = [...L.blocks, ...L.crates].map((o) => o.view);
     const statics = [L.solids, ...L.gates.map((g) => g.body), ...L.cracked.map((c) => c.view),
-      ...L.fragile.map((f) => f.view), ...L.phantom.map((p) => p.view), ...L.crushers.map((c) => c.view)];
+      ...L.fragile.map((f) => f.view), ...L.debris.map((d) => d.view), ...L.phantom.map((p) => p.view),
+      ...L.crushers.map((c) => c.view)];
 
     for (const s of statics) phys.add.collider(P, s, null, (a, b) => this.#onPlayerHitsStatic(...split(a, b)));
     // One-way platforms: only from above, and not while dropping through.
@@ -85,10 +94,20 @@ export class GameScene extends Phaser.Scene {
     // Heavy blocks move only for the Warden; crates for everyone.
     for (const b of L.blocks) phys.add.collider(P, b.view, null, (a, c) => {
       const [pl, blk] = split(a, c);
-      blk.body.pushable = pl.sim.role === 'warden';
+      const warden = pl.sim.role === 'warden';
+      blk.body.pushable = warden;
+      // A Warden walking into the block's side moves it at walking pace (not a sluggish physics shove).
+      const side = pl.body.bottom > blk.body.top + 4;
+      const into = Math.sign(pl.body.velocity.x) === Math.sign(blk.body.center.x - pl.body.center.x);
+      if (warden && side && into) blk.body.setVelocityX(pl.body.velocity.x * 0.9);
       return true;
     });
-    for (const c of L.crates) phys.add.collider(P, c.view);
+    // Crates can be shoved sideways, but never pushed down into the floor by someone landing on them.
+    for (const c of L.crates) phys.add.collider(P, c.view, null, (a, b) => {
+      const [pl, crate] = split(a, b);
+      crate.body.pushable = pl.body.bottom > crate.body.top + 6;
+      return true;
+    });
     // Players stand on each other's heads (and on a planted Anchor), but walk through each other sideways.
     phys.add.collider(P, P, null, (a, b) => this.#stackRule(a, b));
     for (const m of movables) {
@@ -102,6 +121,17 @@ export class GameScene extends Phaser.Scene {
     // The Warden's weight breaks fragile floors a moment after stepping on them.
     if (frag && pl.sim.role === 'warden' && !frag.breakAt && pl.body.bottom <= obj.body.top + 6) frag.breakAt = this.time.now + 250;
     return true;
+  }
+
+  /** Anchor slam landing: breaks debris it lands on. */
+  #slamAt(x, feet) {
+    for (const d of this.level.debris) {
+      if (d.broken) continue;
+      if (x > d.data.x - 10 && x < d.data.x + d.data.w + 10 && Math.abs(feet - d.data.y) < 10) {
+        this.level.breakObject(d);
+        this.#playFx({ type: 'smash', x: d.data.x + d.data.w / 2, y: d.data.y });
+      }
+    }
   }
 
   #stackRule(a, b) {
@@ -118,10 +148,17 @@ export class GameScene extends Phaser.Scene {
   addPlayer(id, name, near = null) {
     const i = this.sims.size;
     const role = ROLE_ORDER[i % ROLE_ORDER.length];              // temporary until lobby role assignment
-    const x = near ? near.x + 30 : this.levelData.spawn.x + i * this.levelData.spawn.spacing;
-    const sim = new PlayerSim(this, this.playerGroup, id, name, role, x, near ? near.feet - 2 : 440);
-    if (near) sim.checkpoint = near.checkpoint;
+    const at = near ? { x: near.x + 30, y: near.feet } : this.#spawnPoint(role, i);
+    const sim = new PlayerSim(this, this.playerGroup, id, name, role, at.x, at.y - 2);
+    if (near) sim.checkpoint = { ...near.checkpoint };
     this.sims.set(id, sim);
+  }
+
+  /** Levels with per-role zones (the Awakening) spawn each role in its own zone. */
+  #spawnPoint(role, i) {
+    const s = this.levelData.spawns?.[role];
+    if (s) return { x: s.x, y: s.y };
+    return { x: this.levelData.spawn.x + i * this.levelData.spawn.spacing, y: 460 };
   }
 
   removePlayer(id) {
@@ -137,7 +174,17 @@ export class GameScene extends Phaser.Scene {
   setInput(ownerId, input) { this.sims.get(this.#controlled(ownerId))?.setInput(input); }
 
   /** Developer role switch (keys 1–4) for the controlled character. */
-  setRole(ownerId, role) { this.sims.get(this.#controlled(ownerId))?.setRole(role); }
+  setRole(ownerId, role) {
+    const sim = this.sims.get(this.#controlled(ownerId));
+    if (!sim || sim.role === role) return;
+    sim.setRole(role);
+    // In zone-based levels, switching role also moves you to that role's zone (developer testing).
+    const s = this.levelData.spawns?.[role];
+    if (s) {
+      sim.checkpoint = { x: s.x, y: s.y };
+      sim.respawn();
+    }
+  }
 
   // ---------------------------------------------------------------- host: developer dummies
   #controlled(ownerId) { return this.control.get(ownerId) ?? ownerId; }
@@ -165,8 +212,13 @@ export class GameScene extends Phaser.Scene {
   /** Which character this client's camera follows. */
   setLocalControl(id) {
     this.localControl = id;
-    const view = this.views.get(id);
-    if (view) this.cameras.main.startFollow(view, false, 0.1, 0.1);
+    this.followLocal();
+  }
+
+  /** (Re)attach the camera to the locally controlled character, unless a scripted camera move is running. */
+  followLocal() {
+    const view = this.views.get(this.localControl);
+    if (view && !this.scripted?.revealing) this.cameras.main.startFollow(view, false, 0.1, 0.1);
   }
 
   // ---------------------------------------------------------------- guest
@@ -199,20 +251,53 @@ export class GameScene extends Phaser.Scene {
     }
     this.level.draw(time);
     this.#drawBeams();
+    this.#updateMood(time, deltaMs / 1000);
+  }
+
+  /** Lighting, fog/grain and scripted moments (all clients). */
+  #updateMood(time, dt) {
+    const lights = this.level.lights();
+    const beams = [];
+    const flares = [];
+    for (const v of this.views.values()) {
+      const s = v.lastState;
+      if (!s) continue;
+      lights.push({ x: s.x, y: s.y - 20, r: 55, a: 0.35 });                        // everyone is faintly visible
+      if (s.role === 'weaver') lights.push({ x: s.x, y: s.y - 22, r: 30 + 60 * (s.energy ?? 100) / 100, a: 0.85 });
+      if (Array.isArray(s.beam)) {
+        const [x1, y1, x2, y2] = s.beam;
+        beams.push({ x1, y1, x2, y2 });
+        lights.push({ x: x2, y: y2, r: 70, a: 0.9 });
+      }
+      if (s.flare) { lights.push({ x: s.x, y: s.y - 20, r: 220, a: 1 }); flares.push({ x: s.x, y: s.y - 20 }); }
+    }
+    this.atmosphere.update(time, lights, beams);
+    this.bg.setScale(1 / this.cameras.main.zoom);
+    const me = this.views.get(this.localControl);
+    this.scripted.update(time, dt, me ? { x: me.x, y: me.y } : null, flares);
   }
 
   #stepHost(now, dt) {
     const players = [...this.sims.values()];
-    const fx = (type, x, y) => { const f = { type, x: Math.round(x), y: Math.round(y) }; this.pendingFx.push(f); this.#playFx(f); };
+    const fx = (type, x, y) => {
+      const f = { type, x: Math.round(x), y: Math.round(y) };
+      this.pendingFx.push(f);
+      this.#playFx(f);
+      if (type === 'slam') this.#slamAt(x, y);
+    };
     const ctx = { level: this.level, players, time: now, dt, fx };
 
     for (const p of players) p.step(ctx);
     this.#stepWorld(ctx);
 
     for (const p of players) {
-      // Checkpoints + falling into pits.
-      for (const cx of this.levelData.checkpoints) if (p.x >= cx && cx > p.checkpoint) p.checkpoint = cx;
-      if (p.feet > this.levelData.height + 60) p.respawn();
+      if (p.ride) continue;
+      // Touching a checkpoint makes it yours (latest one touched wins).
+      for (const c of this.level.checkpoints) {
+        if (Math.abs(p.x - c.x) < 40 && p.feet <= c.y + 4 && p.feet > c.y - 120) p.checkpoint = { x: c.x, y: c.y };
+      }
+      // Falling out of the world or into a hazard respawns you.
+      if (p.feet > this.levelData.height + 60 || this.level.hazards.some((h) => hit(p.bounds, h))) p.respawn();
     }
 
     const snap = players.map((p) => p.snapshot());
@@ -231,40 +316,57 @@ export class GameScene extends Phaser.Scene {
 
   /** Host-only level rules: plates, nodes, gates, phantom platforms, crushers, wind, chain, breakables. */
   #stepWorld({ level: L, players, time, dt }) {
-    // Heavy plates: only a (standing or planted) Anchor presses them.
+    // Heavy plates: only a (standing or planted) Anchor presses them. Latching plates stay down.
     L.plates.forEach((pl, i) => {
       const zone = new Phaser.Geom.Rectangle(pl.data.x, pl.data.y - 6, pl.data.w, 14);
-      L.setPlatePressed(i, players.some((p) => p.role === 'anchor' && hit(p.bounds, zone)));
+      const pressed = players.some((p) => p.role === 'anchor' && hit(p.bounds, zone));
+      L.setPlatePressed(i, pressed || (pl.data.latch && pl.pressed));
     });
-    for (const n of L.nodes) n.lit = n.litUntil > time;
+    // Switches: pressed by a thrown crate, then stay pressed.
+    for (const b of L.buttons) if (!b.pressed && L.crates.some((c) => hit(c.view.getBounds(), b.rect))) b.pressed = true;
+    // Nodes: lit while light hits them; latching nodes stay on once powered.
+    for (const n of L.nodes) {
+      n.lit = n.litUntil > time;
+      if (n.lit && n.data.latch) n.latched = true;
+    }
     for (const p of L.phantom) {
       p.lit = p.litUntil > time;
       p.view.body.enable = p.lit;
     }
-    // Gates open while their plate is pressed or their node is lit. A gate never closes on a player.
+    // Gates open while their plate is pressed / node is lit / switch is pressed. A gate never closes on a player.
     L.gates.forEach((g, i) => {
       const plate = L.plates.find((p) => p.data.opens === g.data.id);
       const node = L.nodes.find((n) => n.data.opens === g.data.id);
-      const wantOpen = !!(plate?.pressed || node?.lit);
+      const button = L.buttons.find((b) => b.data.opens === g.data.id);
+      const wantOpen = !!(plate?.pressed || node?.lit || node?.latched || button?.pressed);
       const blocked = players.some((p) => hit(p.bounds, new Phaser.Geom.Rectangle(g.data.x, g.data.y, g.data.w, g.data.h)));
       L.setGateOpen(i, wantOpen || (g.open && blocked));
     });
 
-    // Crushers: cycle down/up; a bracing Warden holds them up; anyone caught underneath respawns.
+    // Crushers: cycle down/up; a bracing Warden holds them up; anyone caught underneath respawns
+    // (a 'safe' crusher just shoves you back out instead).
     for (const c of L.crushers) {
       c.t = (c.t + dt) % c.data.period;
       const phase = c.t / c.data.period;                          // 0..1
       const down = phase < 0.5 ? Math.min(1, phase * 4) : Math.max(0, 1 - (phase - 0.5) * 4);
-      let bottom = c.data.top + c.data.h + down * (460 - c.data.top - c.data.h);
-      const brace = players.find((p) => p.bracing && p.x > c.data.x && p.x < c.data.x + c.data.w);
+      let bottom = c.data.top + c.data.h + down * (c.floor - c.data.top - c.data.h);
+      // Same reach as PlayerSim's brace check, so stepping under the edge already counts.
+      const under = (p) => p.body.right > c.data.x - 4 && p.body.x < c.data.x + c.data.w + 4;
+      const brace = players.find((p) => p.bracing && under(p));
       if (brace) bottom = Math.min(bottom, brace.body.y - 10);
       c.view.y = bottom - c.data.h / 2;
       c.view.body.reset(c.view.x, c.view.y);
       for (const p of players) {
-        if (p === brace || p.x < c.data.x || p.x > c.data.x + c.data.w) continue;
-        if (bottom > p.body.y + 6 && p.grounded) p.respawn();
+        if (p === brace || p.x < c.data.x || p.x > c.data.x + c.data.w) continue;   // crushed only when centred under it
+        if (bottom > p.body.y + 6 && p.grounded) {
+          if (c.data.safe) { p.body.reset(c.data.x - p.stats.w, p.body.center.y); p.body.setVelocity(-220, -200); }
+          else p.respawn();
+        }
       }
     }
+
+    // Crates slide to a stop on the ground but fly freely when thrown.
+    for (const c of L.crates) if (c.view.body.enable) c.view.body.setDragX(c.view.body.blocked.down ? 600 : 0);
 
     // Wind gusts.
     for (const w of L.wind) {

@@ -12,7 +12,13 @@ export class Level {
     this.scene = scene;
     this.data = data;
     this.host = withPhysics;
-    this.#createParallax();
+    this.floorY = data.floorY ?? 460;          // default crusher floor (gym)
+    // Checkpoints may be plain x values (gym) or { x, y } feet positions.
+    this.checkpoints = (data.checkpoints ?? []).map((c) => (typeof c === 'number' ? { x: c, y: this.floorY } : c));
+    this.hazards = (data.hazards ?? []).map(rectOf);
+
+    if (data.parallax !== false) this.#createParallax();
+    if (data.vault) this.#createVault(data.vault);
 
     const add = scene.add;
     const phys = scene.physics;
@@ -44,36 +50,35 @@ export class Level {
     // --- Breakables ---
     this.cracked = (data.cracked ?? []).map((r) => this.#breakable(r, 0x101010));
     this.fragile = (data.fragile ?? []).map((r) => this.#breakable(r, 0x3a3a3a));
+    this.debris = (data.debris ?? []).map((r) => this.#breakable(r, 0x202020));   // broken by Anchor slam
 
     // --- Crushers ---
     this.crushers = (data.crushers ?? []).map((c) => {
       const view = add.rectangle(c.x + c.w / 2, c.top + c.h / 2, c.w, c.h, INK);
-      add.rectangle(c.x + c.w / 2, c.top / 2, 6, c.top, 0x111111).setDepth(-1); // piston rod
+      add.rectangle(c.x + c.w / 2, c.top - 200, 6, 400, 0x111111).setDepth(-1); // piston rod
       if (withPhysics) { phys.add.existing(view, false); view.body.setAllowGravity(false).setImmovable(true); }
-      return { data: c, view, t: 0, bottomY: 460, braced: false };
+      return { data: c, view, t: 0, floor: c.floor ?? this.floorY, braced: false };
     });
 
     // --- Wind ---
     this.wind = (data.wind ?? []).map((w) => ({
-      data: w, rect: rectOf(w), active: false, t: 0,
+      data: w, rect: rectOf(w), active: false,
+      t: w.startCalm ? w.on : 0,             // startCalm: begin in the calm phase
       streaks: add.graphics().setDepth(5),
     }));
 
-    // --- Plates, gates, nodes, phantom platforms, hooks ---
+    // --- Plates, buttons, gates/bridges, nodes, phantom platforms, hooks ---
     this.plates = (data.plates ?? []).map((p) => ({
       data: p, pressed: false, view: add.rectangle(p.x + p.w / 2, p.y + 4, p.w, 8, DIM),
     }));
-    this.gates = (data.gates ?? []).map((g) => {
-      const view = add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h, INK);
-      let body = null;
-      if (withPhysics) {
-        body = add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h).setVisible(false);
-        phys.add.existing(body, true);
-      }
-      return { data: g, open: false, view, body };
-    });
+    this.buttons = (data.buttons ?? []).map((b) => ({
+      data: b, rect: rectOf(b), pressed: false,
+      view: add.rectangle(b.x + b.w / 2, b.y + b.h / 2, b.w, b.h, 0x444444).setStrokeStyle(1, 0x999999, 0.6),
+    }));
+    this.gates = (data.gates ?? []).map((g) => (g.bridge ? this.#bridge(g) : this.#gate(g)));
     this.nodes = (data.nodes ?? []).map((n) => ({
-      data: n, lit: false, litUntil: 0, view: add.circle(n.x, n.y, 7, 0x333333).setStrokeStyle(2, 0x111111),
+      data: n, lit: false, litUntil: 0, latched: false,
+      view: add.circle(n.x, n.y, 7, 0x333333).setStrokeStyle(2, 0x111111),
     }));
     this.phantom = (data.phantom ?? []).map((p) => {
       const view = add.rectangle(p.x + p.w / 2, p.y + p.h / 2, p.w, p.h, 0xffffff, 0.06)
@@ -85,6 +90,28 @@ export class Level {
 
     this.chainGfx = add.graphics().setDepth(4);
     this.chain = null; // { x1, y1, x2, y2 }
+  }
+
+  #gate(g) {
+    const view = this.scene.add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h, INK);
+    let body = null;
+    if (this.host) {
+      body = this.scene.add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h).setVisible(false);
+      this.scene.physics.add.existing(body, true);
+    }
+    return { data: g, open: false, view, body };
+  }
+
+  /** Drawbridge: stands upright (not walkable) until opened, then swings down flat. */
+  #bridge(g) {
+    const view = this.scene.add.rectangle(g.x + g.w, g.y + g.h / 2, g.w, g.h, INK).setOrigin(1, 0.5).setAngle(90);
+    let body = null;
+    if (this.host) {
+      body = this.scene.add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h).setVisible(false);
+      this.scene.physics.add.existing(body, true);
+      body.body.enable = false;
+    }
+    return { data: g, open: false, view, body, bridge: true };
   }
 
   #dynamicBox(d, w, h, color, drag) {
@@ -106,16 +133,29 @@ export class Level {
     return { id: r.id, data: r, view, cracks: g, broken: false, breakAt: 0 };
   }
 
+  get breakables() { return [...this.cracked, ...this.fragile, ...this.debris]; }
+
+  /** Light sources the level itself provides (all clients): glowing nodes and lit phantom platforms. */
+  lights() {
+    const out = [];
+    for (const n of this.nodes) out.push({ x: n.data.x, y: n.data.y, r: n.lit || n.latched ? 70 : 22, a: n.lit || n.latched ? 0.9 : 0.5 });
+    for (const p of this.phantom) {
+      out.push({ x: p.data.x + p.data.w / 2, y: p.data.y, r: p.lit ? 60 : 18, a: p.lit ? 0.8 : 0.35 });
+    }
+    return out;
+  }
+
   // ---------- State sync ----------
   /** Host: compact dynamic state for the network snapshot. */
   getState() {
     const pos = (o) => [Math.round(o.view.x), Math.round(o.view.y)];
     return {
       ents: Object.fromEntries([...this.blocks, ...this.crates].map((o) => [o.id, pos(o)])),
-      broken: [...this.cracked, ...this.fragile].filter((b) => b.broken).map((b) => b.id),
+      broken: this.breakables.filter((b) => b.broken).map((b) => b.id),
       gates: this.gates.map((g) => g.open),
       plates: this.plates.map((p) => p.pressed),
-      nodes: this.nodes.map((n) => n.lit),
+      buttons: this.buttons.map((b) => b.pressed),
+      nodes: this.nodes.map((n) => n.lit || n.latched),
       phantom: this.phantom.map((p) => p.lit),
       crushers: this.crushers.map((c) => Math.round(c.view.y)),
       wind: this.wind.map((w) => w.active),
@@ -126,12 +166,17 @@ export class Level {
   /** All clients: apply discrete state (host calls it too, to drive visuals). */
   applyState(s) {
     if (!s) return;
-    if (Array.isArray(s.broken)) for (const b of [...this.cracked, ...this.fragile]) if (s.broken.includes(b.id)) this.#breakVisual(b);
+    if (Array.isArray(s.broken)) for (const b of this.breakables) if (s.broken.includes(b.id)) this.#breakVisual(b);
     s.gates?.forEach((v, i) => this.setGateOpen(i, !!v));
     s.plates?.forEach((v, i) => this.#setPlateVisual(i, !!v));
+    s.buttons?.forEach((v, i) => {
+      const b = this.buttons[i]; if (!b) return;
+      b.pressed = !!v;
+      b.view.fillColor = v ? 0xdddddd : 0x444444;
+    });
     s.nodes?.forEach((v, i) => {
       const n = this.nodes[i]; if (!n) return;
-      n.lit = !!v;
+      if (!this.host) n.lit = !!v;
       n.view.fillColor = v ? 0xffffff : 0x333333;
     });
     s.phantom?.forEach((v, i) => {
@@ -179,9 +224,14 @@ export class Level {
     const gate = this.gates[i];
     if (!gate || gate.open === open) return;
     gate.open = open;
+    this.scene.tweens.killTweensOf(gate.view);
+    if (gate.bridge) {
+      if (gate.body) gate.body.body.enable = open;
+      this.scene.tweens.add({ targets: gate.view, angle: open ? 0 : 90, duration: 600, ease: 'Bounce.easeOut' });
+      return;
+    }
     if (gate.body) gate.body.body.enable = !open;
     const closedY = gate.data.y + gate.data.h / 2;
-    this.scene.tweens.killTweensOf(gate.view);
     this.scene.tweens.add({ targets: gate.view, y: open ? closedY - gate.data.h + 6 : closedY, duration: GATE_SLIDE_MS, ease: 'Sine.easeInOut' });
   }
 
@@ -194,8 +244,8 @@ export class Level {
       const r = w.data, dir = Math.sign(r.push);
       for (let i = 0; i < 14; i++) {
         const y = r.y + ((i * 37) % r.h);
-        const x = r.x + (((time * 0.6 * -dir) + i * 91) % r.w + r.w) % r.w;
-        g.lineBetween(x, y, x + 30 * -dir * -1, y);
+        const x = r.x + ((((time * 0.6 * dir) + i * 91) % r.w) + r.w) % r.w;
+        g.lineBetween(x, y, x - 30 * dir, y);
       }
     }
     const c = this.chainGfx.clear();
@@ -203,6 +253,17 @@ export class Level {
       c.lineStyle(3, 0x0a0a0a, 1).lineBetween(this.chain.x1, this.chain.y1, this.chain.x2, this.chain.y2);
       c.lineStyle(1, 0x888888, 0.6).lineBetween(this.chain.x1, this.chain.y1, this.chain.x2, this.chain.y2);
     }
+  }
+
+  /** The central vault (background silhouette), seen from every viewing platform. */
+  #createVault(v) {
+    const g = this.scene.add.graphics().setDepth(-5);
+    g.fillStyle(0x151514, 1).fillRect(v.x, v.y, v.w, v.h);
+    g.lineStyle(1, 0x3a3a38, 0.8);
+    for (let x = v.x; x <= v.x + v.w; x += 40) g.lineBetween(x, v.y, x, v.y + v.h);
+    for (let y = v.y; y <= v.y + v.h; y += 40) g.lineBetween(v.x, y, v.x + v.w, y);
+    g.fillStyle(0xffffff, 0.08).fillCircle(v.x + v.w / 2, v.y + v.h / 2, 60);   // faint core light
+    g.fillStyle(0x0c0c0b, 1).fillRect(v.x + v.w / 2 - 6, v.y - 400, 12, 400); // hanging chain
   }
 
   /** Two layers of tree silhouettes that scroll slower than the camera (depth). */

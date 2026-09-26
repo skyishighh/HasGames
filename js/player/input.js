@@ -17,6 +17,8 @@ export class LocalInput {
       a1: k.J.isDown,
       a2: k.K.isDown,
       sprint: k.SHIFT.isDown,
+      moveL: k.A.isDown, moveR: k.D.isDown,
+      aimL: k.LEFT.isDown, aimR: k.RIGHT.isDown, aimU: k.UP.isDown, aimD: k.DOWN.isDown,
     };
   }
 
