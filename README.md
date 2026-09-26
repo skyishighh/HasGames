@@ -5,6 +5,8 @@ One player hosts from their own browser; up to 3 friends join with a room code
 (WebRTC peer-to-peer via [PeerJS](https://peerjs.com) 1.5.5).
 Built on [Phaser](https://phaser.io) 4.2.1, loaded from a CDN — players install nothing.
 
+See [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the story, roles, threats and design decisions.
+
 ## Run locally
 ES modules need a web server (opening `index.html` as a file won't work):
 
