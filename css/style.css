@@ -1,0 +1,13 @@
+body { margin: 0; background: #0b0b0b; color: #ddd; font-family: system-ui, sans-serif;
+       display: flex; justify-content: center; min-height: 100vh; }
+#lobby { margin-top: 15vh; display: flex; flex-direction: column; gap: 12px; width: 260px; }
+h1 { letter-spacing: .3em; font-weight: 300; text-align: center; }
+input, button { padding: 10px; font-size: 16px; background: #1a1a1a; color: #ddd;
+                border: 1px solid #333; border-radius: 4px; }
+button { cursor: pointer; } button:hover { background: #262626; }
+.join-row { display: flex; gap: 8px; } .join-row input { flex: 1; min-width: 0; text-transform: uppercase; }
+#status { min-height: 1.2em; color: #c88; }
+#game { margin-top: 20px; }
+#hud { margin-bottom: 6px; } #player-list { color: #888; margin-left: 12px; }
+canvas { display: block; max-width: 100%; background: #000; }
+.hint { color: #666; font-size: 14px; }

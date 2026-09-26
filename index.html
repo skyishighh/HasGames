@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HasGames</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- PeerJS: WebRTC peer-to-peer connections + free public signaling server -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <section id="lobby">
+    <h1>HasGames</h1>
+    <input id="name" maxlength="12" placeholder="Your name">
+    <button id="host-btn">Host game</button>
+    <div class="join-row">
+      <input id="code" maxlength="5" placeholder="Room code">
+      <button id="join-btn">Join</button>
+    </div>
+    <p id="status"></p>
+  </section>
+
+  <section id="game" hidden>
+    <div id="hud"><span id="room-label"></span> <span id="player-list"></span></div>
+    <canvas id="canvas" width="960" height="540"></canvas>
+    <p class="hint">Move: A / D or ← / →  ·  Jump: W, ↑ or Space</p>
+  </section>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
