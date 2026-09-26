@@ -19,6 +19,12 @@ const LEVELS = { gym, awakening };
 const hit = Phaser.Geom.Intersects.RectangleToRectangle;
 /** Arcade may pass collider arguments in either order; return [player, other]. */
 const split = (a, b) => (a.sim ? [a, b] : [b, a]);
+/**
+ * True if body `a` came from above body `b`: judged by where `a`'s bottom was at the start of
+ * this physics step, so fast falls (which overlap deeply in one step) still count as landing.
+ */
+const startY = (body) => (body.prev ? body.prev.y : body.y);   // static bodies don't move: no prev
+const cameFromAbove = (a, b, slack = 4) => startY(a) + a.height <= startY(b) + slack;
 
 export class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
@@ -89,25 +95,35 @@ export class GameScene extends Phaser.Scene {
     // One-way platforms: only from above, and not while dropping through.
     for (const o of L.oneWay) phys.add.collider(P, o.view, null, (a, b) => {
       const [pl] = split(a, b);
-      return pl.sim.dropT <= 0 && pl.body.velocity.y >= 0 && pl.body.bottom <= o.view.body.top + 10;
+      return pl.sim.dropT <= 0 && pl.body.velocity.y >= 0 && cameFromAbove(pl.body, o.view.body);
     });
     // Heavy blocks move only for the Warden; crates for everyone.
-    for (const b of L.blocks) phys.add.collider(P, b.view, null, (a, c) => {
-      const [pl, blk] = split(a, c);
-      const warden = pl.sim.role === 'warden';
-      blk.body.pushable = warden;
-      // A Warden walking into the block's side moves it at walking pace (not a sluggish physics shove).
-      const side = pl.body.bottom > blk.body.top + 4;
-      const into = Math.sign(pl.body.velocity.x) === Math.sign(blk.body.center.x - pl.body.center.x);
-      if (warden && side && into) blk.body.setVelocityX(pl.body.velocity.x * 0.9);
-      return true;
-    });
-    // Crates can be shoved sideways, but never pushed down into the floor by someone landing on them.
-    for (const c of L.crates) phys.add.collider(P, c.view, null, (a, b) => {
-      const [pl, crate] = split(a, b);
-      crate.body.pushable = pl.body.bottom > crate.body.top + 6;
-      return true;
-    });
+    // Heavy blocks: never moved by collision separation; only a Warden walking into a side moves them.
+    for (const b of L.blocks) {
+      b.view.body.pushable = false;
+      phys.add.collider(P, b.view, null, (a, c) => {
+        const [pl, blk] = split(a, c);
+        const side = !cameFromAbove(pl.body, blk.body);
+        const into = Math.sign(pl.body.velocity.x) === Math.sign(blk.body.center.x - pl.body.center.x);
+        if (pl.sim.role === 'warden' && side && into) {
+          blk.body.setVelocityX(pl.body.velocity.x * 0.9);
+          blk.pushedUntil = this.time.now + 100;       // no ground friction while being pushed
+        }
+        return true;
+      });
+    }
+    // Crates are never moved by collision separation (a player landing on a corner could squeeze
+    // them through the floor). Instead, anyone walking into a crate's side slides it at walking pace.
+    for (const c of L.crates) {
+      c.view.body.pushable = false;
+      phys.add.collider(P, c.view, null, (a, b) => {
+        const [pl, crate] = split(a, b);
+        const side = !cameFromAbove(pl.body, crate.body);
+        const into = Math.sign(pl.body.velocity.x) === Math.sign(crate.body.center.x - pl.body.center.x);
+        if (side && into) crate.body.setVelocityX(pl.body.velocity.x * 0.9);
+        return true;
+      });
+    }
     // Players stand on each other's heads (and on a planted Anchor), but walk through each other sideways.
     phys.add.collider(P, P, null, (a, b) => this.#stackRule(a, b));
     for (const m of movables) {
@@ -139,7 +155,7 @@ export class GameScene extends Phaser.Scene {
     if (sa.ride || sb.ride) return false;
     const [top, bottom] = a.body.center.y < b.body.center.y ? [a, b] : [b, a];
     if (bottom.sim.planted) return true;                        // a planted Anchor is solid
-    const landing = top.body.bottom <= bottom.body.top + 8 && top.body.velocity.y >= bottom.body.velocity.y;
+    const landing = cameFromAbove(top.body, bottom.body, 8) && top.body.velocity.y >= bottom.body.velocity.y;
     if (landing) bottom.body.pushable = false;                  // don't push the lower player into the floor
     return landing;
   }
@@ -367,6 +383,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    // Blocks slide only while pushed; friction stops them as soon as the push ends.
+    for (const b of L.blocks) b.view.body.setDragX(b.view.pushedUntil > this.time.now ? 0 : 2000);
     // Crates slide to a stop on the ground but fly freely when thrown.
     for (const c of L.crates) if (c.view.body.enable) c.view.body.setDragX(c.view.body.blocked.down ? 600 : 0);
 

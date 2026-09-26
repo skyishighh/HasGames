@@ -21,7 +21,7 @@ export default {
 
   // Respawn points (feet position). Touching one makes it your checkpoint.
   checkpoints: [
-    { x: 150, y: 900 }, { x: 745, y: 900 }, { x: 950, y: 720 }, { x: 1320, y: 380 }, { x: 1700, y: 120 }, { x: 2150, y: 120 },
+    { x: 150, y: 900 }, { x: 745, y: 900 }, { x: 950, y: 740 }, { x: 1320, y: 380 }, { x: 1700, y: 120 }, { x: 2150, y: 120 },
     { x: 150, y: 1540 }, { x: 760, y: 1440 }, { x: 1330, y: 1440 }, { x: 1550, y: 1440 }, { x: 1850, y: 1540 },
     { x: 5760, y: 700 }, { x: 5250, y: 700 }, { x: 4500, y: 700 }, { x: 4050, y: 700 },
     { x: 5850, y: 1540 }, { x: 5150, y: 1540 }, { x: 4670, y: 1540 }, { x: 4325, y: 1540 }, { x: 3970, y: 1540 },
@@ -37,8 +37,8 @@ export default {
     { x: 300, y: 872, w: 30, h: 28 },           // rocks to hop over
     { x: 450, y: 880, w: 40, h: 20 },
     { x: 560, y: 300, w: 140, h: 576 },         // fallen pipe: only a crawling Scout fits under (gap 24)
-    { x: 790, y: 720, w: 510, h: 220 },         // shaft 1 right wall / ledge (180 high, 90 wide: wall-jump up)
-    { x: 1260, y: 380, w: 240, h: 340 },        // mesh wall face and top ledge
+    { x: 790, y: 740, w: 510, h: 200 },         // shaft 1 right wall / ledge (160 high, 90 wide: needs a wall-jump)
+    { x: 1260, y: 380, w: 240, h: 360 },        // mesh wall face and top ledge
     { x: 1500, y: 380, w: 120, h: 40 },
     { x: 1520, y: 120, w: 20, h: 236 },         // shaft 2 (narrow, tall): left wall; crawl in through the 24 px gap below
     { x: 1600, y: 120, w: 20, h: 260 },         // shaft 2 right wall
@@ -46,6 +46,7 @@ export default {
     { x: 1900, y: 200, w: 200, h: 40 },         // practice gap: shallow trench floor (harmless)
     { x: 2100, y: 120, w: 100, h: 40 },
     { x: 2480, y: 120, w: 160, h: 40 },         // VIEWING PLATFORM (Scout)
+    { x: 2634, y: 86, w: 6, h: 34 },            // railing post at the chasm edge
 
     // ================= WARDEN — The Collapse =================
     { x: 0, y: 1060, w: 400, h: 380 },          // collapsed iron: low ceiling over the start
@@ -56,12 +57,14 @@ export default {
     { x: 1920, y: 1440, w: 180, h: 40 },
     { x: 2100, y: 1240, w: 40, h: 240 },        // wall: the only way on is down through the cracked floor
     { x: 1760, y: 1540, w: 880, h: 60 },        // lower room floor → VIEWING PLATFORM (Warden) at the end
+    { x: 2634, y: 1506, w: 6, h: 34 },          // railing post
 
     // ================= ANCHOR — The Cliff =================
     { x: 3950, y: 700, w: 150, h: 240 },
     { x: 4350, y: 700, w: 1570, h: 240 },       // cliff top (pit at the far right edge)
     { x: 3500, y: 700, w: 350, h: 20 },         // tunnel ceiling
     { x: 3380, y: 880, w: 570, h: 60 },         // tunnel floor → VIEWING PLATFORM (Anchor)
+    { x: 3380, y: 846, w: 6, h: 34 },           // railing post
     { x: 3700, y: 400, w: 40, h: 300 },         // wall: the top path is closed, go down through the debris
 
     // ================= WEAVER — The Dark Tunnel =================
@@ -73,6 +76,7 @@ export default {
     { x: 4640, y: 1540, w: 60, h: 60 },         // safe pad: recharge before the long bridges
     { x: 4300, y: 1540, w: 50, h: 60 },         // island to recharge light between two long bridges
     { x: 3380, y: 1540, w: 620, h: 60 },        // → VIEWING PLATFORM (Weaver)
+    { x: 3380, y: 1506, w: 6, h: 34 },          // railing post
   ],
 
   // Falling into these respawns you at your checkpoint.
@@ -84,7 +88,7 @@ export default {
     { x: 4350, y: 1580, w: 290, h: 20 },
   ],
 
-  mesh: [{ x: 1200, y: 380, w: 60, h: 340 }],
+  mesh: [{ x: 1200, y: 380, w: 60, h: 360 }],
 
   // Warden
   blocks: [{ id: 'b1', x: 480, y: 1480, w: 60, h: 60 }],
