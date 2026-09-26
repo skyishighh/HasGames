@@ -17,9 +17,9 @@
 | **Core theme** | Loneliness → connection. Four isolated strangers become real friends by surviving together. The players themselves are strangers connecting through an online game — the story mirrors them. |
 
 ### Storytelling rules
-- **Gameplay has no narration, no dialogue, no on-screen text.** Everything is told through environment, animation, light, sound and action.
+- **Gameplay inside the Codex has no narration, no dialogue, no on-screen text.** Everything is told through environment, animation, light, sound and action.
 - **Scripted set pieces** make key moments feel alive (collapses, chases, reveals) while players stay in control.
-- **Only the epilogue** is presented as illustrated **comic panels**.
+- **The prologue and epilogue may use text** (e.g. on-screen chat, messages, captions). The epilogue is presented as illustrated **comic panels**.
 
 ---
 
@@ -41,7 +41,7 @@ Every puzzle may assume all four abilities are present.
 
 ## 3. Story (Acts)
 
-### Prologue — "Midnight" (playable, ~30–60 s, wordless)
+### Prologue — "Midnight" (playable, ~30–60 s; text allowed)
 - Each player starts alone in **their character's room**, dim and grey, lit only by a monitor.
 - Small interactive details reveal their loneliness (see table above).
 - **Hidden detail:** from the window, the night city shows **three other lit windows** — the other players. Pays off in the epilogue.
@@ -78,7 +78,7 @@ The Hollow appear only as **glimpses** here (flickers, distant watching shapes).
 - The game left behind a multiplayer lobby log; they discover they live in the **same city** and share their in-game usernames. They message each other.
 - Final panel: the four teens meeting at a local café, laughing — the game gave them the friends they needed.
 - The window detail from the prologue pays off: the four lit windows were each other.
-- Minimal text (chat messages / speech bubbles) is acceptable **in the comic only**.
+- Text (chat messages, speech bubbles, captions) is allowed here.
 
 ---
 
@@ -112,7 +112,22 @@ A huge eye-like machine woven from thousands of Hollow cords, controlling the Gr
 
 ---
 
-## 5. Technical Implications (from design decisions)
+## 5. Death and Rescue ("Taken")
+
+When a player is killed by a threat or hazard, they are **Taken**, not removed:
+- The player becomes **trapped** where they fell (e.g. wrapped in Hollow cords, pulled under the ice-like surface), visible to everyone, and struggling.
+- A **rescue timer** starts (tunable, starting value ~10 s), shown through visuals and sound only (cords tightening, light fading) — no text.
+- **Any teammate** who reaches the Taken player and holds the interact action for a short time frees them. The rescued player returns with brief invulnerability.
+- **Team restart** at the last checkpoint happens if the timer runs out, **or** if all remaining players are Taken at the same time.
+- **Solo Awakening (Act II):** nobody can rescue yet, so a fallen player simply restarts at their zone's last checkpoint.
+- Some deaths are **instant team restarts** by design (e.g. falling into a bottomless pit, a set-piece failure where rescue is impossible) — decide per hazard.
+- Theme: *you are never left behind — your friends come for you.*
+
+**Build order:** start with plain team-restart-at-checkpoint while levels are prototyped, then add the Taken/rescue system as its own step.
+
+---
+
+## 6. Technical Implications (from design decisions)
 
 | Decision | What the systems need |
 |---|---|
@@ -124,12 +139,13 @@ A huge eye-like machine woven from thousands of Hollow cords, controlling the Gr
 | Scripted set pieces | Host-authoritative **trigger/sequence system**, events broadcast so all screens stay in sync |
 | Anchor tethers, pulling players over gaps | Likely needs rope/joint physics → evaluate Phaser's **Matter.js** (Arcade has no joints) |
 | Threat AI | Runs on the host only; guests receive state (same model as players) |
+| Taken / rescue | Host-owned player states (alive / taken / rescued), rescue timer, checkpoint restore for all players |
 | Testing with 4 players | Automated tests with 4 simulated players; a **developer-only** mode for one person to control several characters |
 | AI-generated art | Asset pipeline: fixed style prompt, transparent PNGs, parallax layers, cut-out (part-based) character animation |
 
 ---
 
-## 6. Decision Log
+## 7. Decision Log
 
 | Decision | Choice |
 |---|---|
@@ -138,13 +154,14 @@ A huge eye-like machine woven from thousands of Hollow cords, controlling the Gr
 | Story | *The Codex: Connected* (replaces earlier drafts: *Unsaid*, *The Tethered Dark*, *Last Turn*) |
 | Player count | Exactly 4, required to start |
 | Role assignment | Random, by the game |
-| Narrative delivery | Wordless gameplay + scripted set pieces; comic-panel epilogue |
-| Prologue | Playable, wordless, per-character rooms |
+| Narrative delivery | Wordless gameplay + scripted set pieces; text allowed in prologue and comic-panel epilogue |
+| Death | "Taken" + teammate rescue with a timer; team restarts at checkpoint on failure |
+| Prologue | Playable, per-character rooms (text allowed) |
 | Main threat | The Hollow (hunt isolated players) |
 | Area threats | Watchers, Eaters, Tracers, Overflow, Collector; final: Codex Core |
 
-## 7. OPEN Questions
-- Death and checkpoint rules (what happens when one player dies? whole team respawns?).
+## 8. OPEN Questions
+- Checkpoint placement rules, and which hazards are instant team restarts.
 - Communication tools inside the game (voice chat, pings, emotes?) — gameplay is wordless, but players still need to coordinate.
 - Exact list and order of Act IV areas; set piece per area.
 - Weaver/Anchor abilities in detail (ranges, cooldowns, controls).
