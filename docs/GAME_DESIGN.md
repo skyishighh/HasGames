@@ -156,13 +156,13 @@ When a player is killed by a threat or hazard, they are **Taken**, not removed:
 | Role assignment | Random, by the game |
 | Narrative delivery | Wordless gameplay + scripted set pieces; text allowed in prologue and comic-panel epilogue |
 | Death | "Taken" + teammate rescue with a timer; team restarts at checkpoint on failure |
+| Communication | External (Discord or similar); no in-game voice/chat/pings |
 | Prologue | Playable, per-character rooms (text allowed) |
 | Main threat | The Hollow (hunt isolated players) |
 | Area threats | Watchers, Eaters, Tracers, Overflow, Collector; final: Codex Core |
 
 ## 8. OPEN Questions
 - Checkpoint placement rules, and which hazards are instant team restarts.
-- Communication tools inside the game (voice chat, pings, emotes?) — gameplay is wordless, but players still need to coordinate.
 - Exact list and order of Act IV areas; set piece per area.
 - Weaver/Anchor abilities in detail (ranges, cooldowns, controls).
 - Character art style prompt and the AI art pipeline.
