@@ -271,7 +271,8 @@ export class PlayerSim {
 
     // Hold J under (or stepping under) a crusher: brace it.
     if (inp.a1) {
-      const crusher = level.crushers.find((k) => body.right > k.data.x - 4 && body.x < k.data.x + k.data.w + 4);
+      const crusher = level.crushers.find((k) => body.y >= k.data.top && this.feet <= k.floor + 2 &&
+        body.right > k.data.x - 4 && body.x < k.data.x + k.data.w + 4);
       if (crusher) this.bracing = true;
     }
 

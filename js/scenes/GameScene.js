@@ -351,13 +351,15 @@ export class GameScene extends Phaser.Scene {
       const down = phase < 0.5 ? Math.min(1, phase * 4) : Math.max(0, 1 - (phase - 0.5) * 4);
       let bottom = c.data.top + c.data.h + down * (c.floor - c.data.top - c.data.h);
       // Same reach as PlayerSim's brace check, so stepping under the edge already counts.
-      const under = (p) => p.body.right > c.data.x - 4 && p.body.x < c.data.x + c.data.w + 4;
+      // Only players between the crusher's top and its floor are affected (not other zones above/below).
+      const inColumn = (p) => p.body.y >= c.data.top && p.feet <= c.floor + 2;
+      const under = (p) => inColumn(p) && p.body.right > c.data.x - 4 && p.body.x < c.data.x + c.data.w + 4;
       const brace = players.find((p) => p.bracing && under(p));
       if (brace) bottom = Math.min(bottom, brace.body.y - 10);
       c.view.y = bottom - c.data.h / 2;
       c.view.body.reset(c.view.x, c.view.y);
       for (const p of players) {
-        if (p === brace || p.x < c.data.x || p.x > c.data.x + c.data.w) continue;   // crushed only when centred under it
+        if (p === brace || !inColumn(p) || p.x < c.data.x || p.x > c.data.x + c.data.w) continue;   // crushed only when centred under it
         if (bottom > p.body.y + 6 && p.grounded) {
           if (c.data.safe) { p.body.reset(c.data.x - p.stats.w, p.body.center.y); p.body.setVelocity(-220, -200); }
           else p.respawn();
