@@ -14,6 +14,7 @@ ES modules need a web server (opening `index.html` as a file won't work):
 ## Structure
 - `js/main.js`               – lobby UI, networking setup, boots Phaser
 - `js/net.js`                – host/guest networking (PeerJS wrapper)
+- `js/background-ticker.js` + `js/tick-worker.js` – keep the host simulating while its tab is hidden
 - `js/config.js`             – shared gameplay constants
 - `js/scenes/GameScene.js`   – gameplay: host runs Arcade Physics, guests render snapshots
 - `js/objects/PlayerView.js` – player visuals (separate from the physics hitbox)

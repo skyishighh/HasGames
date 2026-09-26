@@ -2,6 +2,7 @@
 import { HostNet, GuestNet, MAX_PLAYERS } from './net.js';
 import { WIDTH, HEIGHT } from './config.js';
 import { GameScene } from './scenes/GameScene.js';
+import { keepRunningWhenHidden } from './background-ticker.js';
 
 const $ = (id) => document.getElementById(id);
 const HOST_ID = 'host';
@@ -32,6 +33,7 @@ function bootGame(code, sceneData) {
     });
     // The scene calls onReady at the end of create(); listening for its 'create'
     // event here would be too late, because scene.add() can create it synchronously.
+    if (sceneData.role === 'host') keepRunningWhenHidden(game);
     game.events.once('ready', () => {
       game.scene.add('game', GameScene, true, { ...sceneData, onPlayers: updatePlayerList, onReady: resolve });
     });
