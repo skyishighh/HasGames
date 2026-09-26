@@ -54,7 +54,9 @@ async function startHost() {
     onLeave: (id) => run((s) => s.removePlayer(id)),
     onMessage: (id, msg) => {
       if (msg?.t === 'input') run((s) => s.setInput(id, msg.input));
-      else if (msg?.t === 'role' && typeof msg.role === 'string') run((s) => s.setRole(id, msg.role)); // dev role switch
+      else if (msg?.t === 'role' && typeof msg.role === 'string') run((s) => s.setRole(id, msg.role)); // dev: role switch
+      else if (msg?.t === 'dev' && msg.action === 'spawn') run((s) => s.devSpawn(id));                 // dev: dummy
+      else if (msg?.t === 'dev' && msg.action === 'cycle') run((s) => net.send(id, { t: 'control', id: s.devCycle(id) }));
     },
   });
   const code = await net.start();
@@ -72,6 +74,7 @@ async function startGuest() {
   const net = new GuestNet({
     onMessage: (msg) => {
       if (msg?.t === 'state') scene?.applySnapshot(msg); // snapshots before boot are simply skipped
+      else if (msg?.t === 'control' && typeof msg.id === 'string') scene?.setLocalControl(msg.id);
       else if (msg?.t === 'reject') rejected = msg.reason;
     },
     onClose: () => { alert(rejected || 'Disconnected from host.'); location.reload(); },

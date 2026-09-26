@@ -41,7 +41,8 @@ Every puzzle may assume all four abilities are present.
 
 | Key | Everyone |
 |---|---|
-| A / D (← / →) | Move |
+| A / D (← / →) | Move (jog) |
+| Shift | Sprint (×1.45 of the role's jog speed; loud — sound-hunting threats will react) |
 | W / Space (↑) | Jump |
 | S (↓) | Crouch / drop through thin platforms |
 | E | Interact: levers, buttons, ledges; **hold** to rescue a Taken teammate |
@@ -67,7 +68,7 @@ Weak: blown by wind; cannot push or lift heavy objects. Team role: high switches
 |---|---|
 | Walk into heavy block | **Push** blocks nobody else can move |
 | J near object | **Grab & lift**; J again to **throw** |
-| J while running | **Smash** cracked walls and weak floors |
+| Shift + J (sprinting) | **Smash** cracked walls and weak floors |
 | Hold J under something | **Brace** falling pillars, closing doors, crushers for a few seconds |
 | K next to teammate | **Throw a teammate** upward or across a gap |
 Weak: too big for vents; breaks fragile floors by weight. Team role: force paths open, hold dangers back, launch teammates.

@@ -3,7 +3,7 @@
 //           and the level rules, then broadcasts snapshots
 //  - guest: has no physics; sends input and draws interpolated snapshots
 import { WIDTH, HEIGHT, GRAVITY, SNAPSHOT_HZ } from '../config.js';
-import { ROLE_ORDER } from '../roles.js';
+import { ROLE_ORDER, EMPTY_INPUT } from '../roles.js';
 import { PlayerView } from '../objects/PlayerView.js';
 import { PlayerSim } from '../player/PlayerSim.js';
 import { LocalInput } from '../player/input.js';
@@ -32,6 +32,9 @@ export class GameScene extends Phaser.Scene {
     this.lastSentInput = '';
     this.buffer = new SnapshotBuffer(); // guest only
     this.pendingFx = [];      // host: effects to broadcast with the next snapshot
+    // Developer mode: each client controls its own character or one of its dummies.
+    this.control = new Map(); // host only: ownerId -> controlled sim id
+    this.localControl = data.myId; // which character this client's camera follows
   }
 
   create() {
@@ -112,23 +115,59 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------- host: players
-  addPlayer(id, name) {
+  addPlayer(id, name, near = null) {
     const i = this.sims.size;
     const role = ROLE_ORDER[i % ROLE_ORDER.length];              // temporary until lobby role assignment
-    const x = this.levelData.spawn.x + i * this.levelData.spawn.spacing;
-    this.sims.set(id, new PlayerSim(this, this.playerGroup, id, name, role, x, 440));
+    const x = near ? near.x + 30 : this.levelData.spawn.x + i * this.levelData.spawn.spacing;
+    const sim = new PlayerSim(this, this.playerGroup, id, name, role, x, near ? near.feet - 2 : 440);
+    if (near) sim.checkpoint = near.checkpoint;
+    this.sims.set(id, sim);
   }
 
   removePlayer(id) {
-    this.sims.get(id)?.destroy();
-    this.sims.delete(id);
-    this.#removeView(id);
+    for (const simId of [id, ...this.#dummiesOf(id)]) {
+      this.sims.get(simId)?.destroy();
+      this.sims.delete(simId);
+      this.#removeView(simId);
+    }
+    this.control.delete(id);
   }
 
-  setInput(id, input) { this.sims.get(id)?.setInput(input); }
+  /** Input from a client goes to whichever character that client currently controls. */
+  setInput(ownerId, input) { this.sims.get(this.#controlled(ownerId))?.setInput(input); }
 
-  /** Developer role switch (keys 1–4). */
-  setRole(id, role) { this.sims.get(id)?.setRole(role); }
+  /** Developer role switch (keys 1–4) for the controlled character. */
+  setRole(ownerId, role) { this.sims.get(this.#controlled(ownerId))?.setRole(role); }
+
+  // ---------------------------------------------------------------- host: developer dummies
+  #controlled(ownerId) { return this.control.get(ownerId) ?? ownerId; }
+  #dummiesOf(ownerId) { return [...this.sims.keys()].filter((id) => id.startsWith(`${ownerId}#dummy`)); }
+
+  /** Key 0: spawn an idle dummy teammate next to the owner's controlled character (max 3). */
+  devSpawn(ownerId) {
+    const dummies = this.#dummiesOf(ownerId);
+    if (dummies.length >= 3 || this.sims.size >= 8) return;
+    let n = 1;
+    while (this.sims.has(`${ownerId}#dummy${n}`)) n++;
+    this.addPlayer(`${ownerId}#dummy${n}`, `Dummy ${n}`, this.sims.get(this.#controlled(ownerId)));
+  }
+
+  /** Tab: move control to the owner's next character. Returns the newly controlled id. */
+  devCycle(ownerId) {
+    const chain = [ownerId, ...this.#dummiesOf(ownerId)];
+    const current = this.#controlled(ownerId);
+    const next = chain[(chain.indexOf(current) + 1) % chain.length];
+    this.sims.get(current)?.setInput({ ...EMPTY_INPUT });   // the one we leave stands still
+    this.control.set(ownerId, next);
+    return next;
+  }
+
+  /** Which character this client's camera follows. */
+  setLocalControl(id) {
+    this.localControl = id;
+    const view = this.views.get(id);
+    if (view) this.cameras.main.startFollow(view, false, 0.1, 0.1);
+  }
 
   // ---------------------------------------------------------------- guest
   applySnapshot(msg) {
@@ -141,14 +180,18 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------- loop
   update(time, deltaMs) {
     const input = this.localInput.read();
-    const roleIdx = this.localInput.rolePressed();
+    const dev = this.localInput.devAction();
 
     if (this.role === 'host') {
-      if (roleIdx >= 0) this.setRole(this.myId, ROLE_ORDER[roleIdx]);
+      if (dev?.role !== undefined) this.setRole(this.myId, ROLE_ORDER[dev.role]);
+      if (dev?.spawn) this.devSpawn(this.myId);
+      if (dev?.cycle) this.setLocalControl(this.devCycle(this.myId));
       this.setInput(this.myId, input);
       this.#stepHost(time / 1000, deltaMs / 1000);
     } else {
-      if (roleIdx >= 0) this.net.send({ t: 'role', role: ROLE_ORDER[roleIdx] });
+      if (dev?.role !== undefined) this.net.send({ t: 'role', role: ROLE_ORDER[dev.role] });
+      if (dev?.spawn) this.net.send({ t: 'dev', action: 'spawn' });
+      if (dev?.cycle) this.net.send({ t: 'dev', action: 'cycle' });
       const key = JSON.stringify(input);
       if (key !== this.lastSentInput) { this.net.send({ t: 'input', input }); this.lastSentInput = key; }
       const frame = this.buffer.sampleAll();
@@ -249,7 +292,7 @@ export class GameScene extends Phaser.Scene {
         const isMe = s.id === this.myId;
         view = new PlayerView(this, String(s.name).slice(0, 12), isMe);
         this.views.set(s.id, view);
-        if (isMe) this.cameras.main.startFollow(view, false, 0.1, 0.1);
+        if (s.id === this.localControl) this.cameras.main.startFollow(view, false, 0.1, 0.1);
         this.onPlayers?.(list);
       }
       view.applyState(s);

@@ -14,8 +14,12 @@ ES modules need a web server (opening `index.html` as a file won't work):
     # open http://localhost:8000
 
 ## Controls
-Move A/D · Jump W/Space · Crouch S · Interact E · Abilities J / K.
-Developer only: keys **1–4** switch your role (Scout, Warden, Weaver, Anchor) so every ability can be tested alone.
+Move A/D (jog) · Sprint Shift · Jump W/Space · Crouch S · Interact E · Abilities J / K.
+
+Developer only (test build):
+- **1–4** switch the controlled character's role (Scout, Warden, Weaver, Anchor)
+- **0** spawns a dummy teammate next to you (up to 3)
+- **Tab** switches which character you control (yours or a dummy), so two-player abilities can be tested alone
 
 ## Structure
 - `js/main.js`                  – lobby UI, networking setup, boots Phaser

@@ -2,7 +2,7 @@
 export class LocalInput {
   constructor(scene) {
     this.keys = scene.input.keyboard.addKeys(
-      'A,D,W,S,E,J,K,SPACE,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR');
+      'A,D,W,S,E,J,K,SPACE,SHIFT,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR,ZERO,TAB');
   }
 
   read() {
@@ -16,17 +16,23 @@ export class LocalInput {
       interact: k.E.isDown,
       a1: k.J.isDown,
       a2: k.K.isDown,
+      sprint: k.SHIFT.isDown,
     };
   }
 
-  /** Developer role switch (keys 1–4). Returns a role index or -1. */
-  rolePressed() {
+  /**
+   * Developer actions (test build only):
+   *  1–4 → { role: index }   switch the controlled character's role
+   *  0   → { spawn: true }   spawn a dummy teammate
+   *  Tab → { cycle: true }   switch control between your character and your dummies
+   */
+  devAction() {
     const k = this.keys;
     const J = Phaser.Input.Keyboard.JustDown;
-    if (J(k.ONE)) return 0;
-    if (J(k.TWO)) return 1;
-    if (J(k.THREE)) return 2;
-    if (J(k.FOUR)) return 3;
-    return -1;
+    const roleKeys = [k.ONE, k.TWO, k.THREE, k.FOUR];
+    for (let i = 0; i < roleKeys.length; i++) if (J(roleKeys[i])) return { role: i };
+    if (J(k.ZERO)) return { spawn: true };
+    if (J(k.TAB)) return { cycle: true };
+    return null;
   }
 }

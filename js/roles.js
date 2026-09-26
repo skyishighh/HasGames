@@ -7,11 +7,13 @@ export const ROLES = {
   anchor: { speed: 190, jump: 540, w: 22, h: 42, crouchH: 42, color: 0x050505 },
 };
 export const ROLE_ORDER = ['scout', 'warden', 'weaver', 'anchor'];
+/** Holding Shift multiplies a role's jog speed by this. */
+export const SPRINT_MULT = 1.45;
 
 /** Keyboard state sent from each client to the host. */
 export const EMPTY_INPUT = {
   left: false, right: false, up: false, down: false,
-  jump: false, interact: false, a1: false, a2: false,
+  jump: false, interact: false, a1: false, a2: false, sprint: false,
 };
 /** Buttons whose *press* (not hold) matters; host detects presses per player. */
 export const EDGE_KEYS = ['jump', 'interact', 'a1', 'a2'];

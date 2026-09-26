@@ -1,6 +1,6 @@
 // Host-side simulation of one player: movement + role abilities.
 // Guests never run this; they receive the snapshot() output and draw it.
-import { ROLES, EMPTY_INPUT, EDGE_KEYS } from '../roles.js';
+import { ROLES, EMPTY_INPUT, EDGE_KEYS, SPRINT_MULT } from '../roles.js';
 
 const Rect = Phaser.Geom.Rectangle;
 const hit = Phaser.Geom.Intersects.RectangleToRectangle;
@@ -57,6 +57,7 @@ export class PlayerSim {
     this.jumpBufT = 0;           // jump pressed slightly before landing still counts
     this.coyoteT = 0;            // jump shortly after leaving a ledge still counts
     this.wallT = 0; this.wallDir = 0; // Scout: wall contact grace (contact flags flicker frame to frame)
+    this.sprinting = false;
   }
 
   #createHitbox(role, x, feetY) {
@@ -131,11 +132,15 @@ export class PlayerSim {
     // Drop through one-way platforms.
     if (inp.down && pr.jump && this.grounded) this.dropT = T.dropTime;
 
+    // Shift: sprint (faster, and loud — threats that hunt by sound will use this flag).
+    this.sprinting = inp.sprint && dir !== 0 && !this.crouching && !this.planted;
+
     const ability = { scout: this.#scout, warden: this.#warden, weaver: this.#weaver, anchor: this.#anchor }[this.role];
     const consumed = ability.call(this, ctx, dir);   // role may take over movement this frame
 
     if (!consumed) {
-      const speed = this.crouching ? Math.min(this.stats.speed, T.crawlSpeed) : this.stats.speed;
+      const speed = this.crouching ? Math.min(this.stats.speed, T.crawlSpeed)
+        : this.stats.speed * (this.sprinting ? SPRINT_MULT : 1);
       if (this.lockT <= 0) body.setVelocityX(dir * speed);
       if (this.jumpBufT > 0 && this.coyoteT > 0 && !inp.down) {
         body.setVelocityY(-this.stats.jump);
@@ -242,8 +247,7 @@ export class PlayerSim {
     }
 
     if (pr.a1) {
-      const running = Math.abs(dir) > 0;
-      const crate = !running && level.crates.find((k) => !k.carriedBy &&
+      const crate = !this.sprinting && level.crates.find((k) => !k.carriedBy &&
         Phaser.Math.Distance.Between(k.view.x, k.view.y, this.x, body.center.y) < T.liftRange);
       if (crate) {                                   // J near crate: lift
         this.carrying = crate;
@@ -251,7 +255,7 @@ export class PlayerSim {
         crate.view.body.enable = false;
         return false;
       }
-      if (running) {                                 // J while running: smash
+      if (this.sprinting) {                          // Shift + J (sprinting): smash
         const front = new Rect(this.facing > 0 ? body.right : body.x - T.smashRange, body.y, T.smashRange, body.height);
         const wall = level.cracked.find((w) => !w.broken && hit(front, w.view.getBounds()));
         if (wall) { level.breakObject(wall); ctx.fx('smash', wall.view.x, wall.view.y); }
@@ -452,6 +456,7 @@ export class PlayerSim {
       facing: this.facing,
       crouch: this.crouching, climb: this.climbing, planted: this.planted, brace: this.bracing,
       carry: !!this.carrying, energy: Math.round(this.energy), dash: this.dashT > 0, ride: !!this.ride,
+      sprint: this.sprinting,
       beam: this.beam && [this.beam.x1, this.beam.y1, this.beam.x2, this.beam.y2].map(Math.round),
       flare: this.flareT > 0,
     };
