@@ -1,59 +1,58 @@
-// Entry point: lobby UI, then the host or guest game loop.
+// Entry point: lobby UI, networking setup, then boots Phaser with the GameScene.
 import { HostNet, GuestNet, MAX_PLAYERS } from './net.js';
-import { World } from './world.js';
-import { readInput } from './input.js';
-import { render } from './render.js';
+import { WIDTH, HEIGHT } from './config.js';
+import { GameScene } from './scenes/GameScene.js';
 
 const $ = (id) => document.getElementById(id);
-const ctx = $('canvas').getContext('2d');
-const SNAPSHOT_HZ = 20;
 const HOST_ID = 'host';
 
 function setStatus(text) { $('status').textContent = text; }
 function playerName() { return $('name').value.trim() || 'Player'; }
 
-function showGame(code, players) {
+function updatePlayerList(players) {
+  $('player-list').textContent = `${players.length}/${MAX_PLAYERS} · ` + players.map((p) => p.name).join(', ');
+}
+
+/** Shows the game screen and starts Phaser. Resolves with the running GameScene. */
+function bootGame(code, sceneData) {
   $('lobby').hidden = true;
   $('game').hidden = false;
   $('room-label').textContent = `Room: ${code}`;
-  updatePlayerList(players);
-}
 
-function updatePlayerList(players) {
-  $('player-list').textContent = `${players.length}/${MAX_PLAYERS} · ` + players.map((p) => p.name).join(', ');
+  return new Promise((resolve) => {
+    const game = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: 'game-container',
+      width: WIDTH,
+      height: HEIGHT,
+      backgroundColor: '#000000',
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
+      physics: { default: 'arcade', arcade: { debug: false } },
+      scene: [],
+    });
+    // The scene calls onReady at the end of create(); listening for its 'create'
+    // event here would be too late, because scene.add() can create it synchronously.
+    game.events.once('ready', () => {
+      game.scene.add('game', GameScene, true, { ...sceneData, onPlayers: updatePlayerList, onReady: resolve });
+    });
+  });
 }
 
 // ---------- Host ----------
 async function startHost() {
   setStatus('Creating room…');
-  const world = new World();
+  let scene = null;
+  const pending = []; // net events that arrive before the scene exists
+  const run = (fn) => (scene ? fn(scene) : pending.push(fn));
+
   const net = new HostNet({
-    onJoin: (id, name) => world.addPlayer(id, name),
-    onLeave: (id) => world.removePlayer(id),
-    onMessage: (id, msg) => { if (msg?.t === 'input') world.setInput(id, msg.input); },
+    onJoin: (id, name) => run((s) => s.addPlayer(id, name)),
+    onLeave: (id) => run((s) => s.removePlayer(id)),
+    onMessage: (id, msg) => { if (msg?.t === 'input') run((s) => s.setInput(id, msg.input)); },
   });
   const code = await net.start();
-  world.addPlayer(HOST_ID, playerName());
-  showGame(code, world.snapshot());
-
-  let last = performance.now(), sinceSnapshot = 0;
-  function frame(now) {
-    const dt = Math.min((now - last) / 1000, 0.05); // clamp: avoids huge jumps after tab switches
-    last = now;
-    world.setInput(HOST_ID, readInput());
-    world.step(dt);
-
-    const snap = world.snapshot();
-    sinceSnapshot += dt;
-    if (sinceSnapshot >= 1 / SNAPSHOT_HZ) {
-      sinceSnapshot = 0;
-      net.broadcast({ t: 'state', players: snap });
-      updatePlayerList(snap);
-    }
-    render(ctx, snap, HOST_ID);
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
+  scene = await bootGame(code, { role: 'host', net, myId: HOST_ID, myName: playerName() });
+  pending.forEach((fn) => fn(scene));
 }
 
 // ---------- Guest ----------
@@ -62,27 +61,16 @@ async function startGuest() {
   if (code.length !== 5) return setStatus('Enter the 5-letter room code.');
   setStatus('Joining…');
 
-  let players = [], rejected = null;
+  let scene = null, rejected = null;
   const net = new GuestNet({
     onMessage: (msg) => {
-      if (msg?.t === 'state') players = msg.players;
+      if (msg?.t === 'state') scene?.applySnapshot(msg.players); // snapshots before boot are simply skipped
       else if (msg?.t === 'reject') rejected = msg.reason;
     },
     onClose: () => { alert(rejected || 'Disconnected from host.'); location.reload(); },
   });
   const myId = await net.join(code, playerName());
-  showGame(code, players);
-
-  let lastSent = '';
-  function frame() {
-    const input = readInput();
-    const key = JSON.stringify(input);
-    if (key !== lastSent) { net.send({ t: 'input', input }); lastSent = key; } // only send changes
-    render(ctx, players, myId);
-    updatePlayerList(players);
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
+  scene = await bootGame(code, { role: 'guest', net, myId, myName: playerName() });
 }
 
 function onError(err) {

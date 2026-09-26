@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="css/style.css">
   <!-- PeerJS: WebRTC peer-to-peer connections + free public signaling server -->
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <!-- Phaser: browser game framework (rendering, physics, input, scenes) -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.min.js"></script>
 </head>
 <body>
   <section id="lobby">
@@ -22,7 +24,7 @@
 
   <section id="game" hidden>
     <div id="hud"><span id="room-label"></span> <span id="player-list"></span></div>
-    <canvas id="canvas" width="960" height="540"></canvas>
+    <div id="game-container"></div>
     <p class="hint">Move: A / D or ← / →  ·  Jump: W, ↑ or Space</p>
   </section>
 

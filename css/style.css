@@ -9,5 +9,6 @@ button { cursor: pointer; } button:hover { background: #262626; }
 #status { min-height: 1.2em; color: #c88; }
 #game { margin-top: 20px; }
 #hud { margin-bottom: 6px; } #player-list { color: #888; margin-left: 12px; }
-canvas { display: block; max-width: 100%; background: #000; }
+#game-container { width: min(960px, 100vw); aspect-ratio: 16 / 9; background: #000; }
 .hint { color: #666; font-size: 14px; }
+[hidden] { display: none !important; }
