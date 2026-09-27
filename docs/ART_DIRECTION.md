@@ -17,15 +17,17 @@ Everything below follows from that sentence.
 
 ## 2. Value scale (the most important rule)
 
+Values are measured from `docs/reference/style_frame.png`, which is the reference.
+
 The game has no color, so brightness ("value") is how players tell things apart. Each depth band
 has its own brightness range, and bands never overlap.
 
 | Band | What lives here | Brightness (0 = black, 255 = white) | Current in code |
 |---|---|---|---|
 | **Light** | Eyes, fragments, Weaver's beam and hands, nodes when lit | 230–255 | `#ffffff` |
-| **Sky** | Sky and fog glow | 150–200 at the centre, 30–60 at the edges | `#9a9a94` → `#1c1c1a` |
-| **Far** | Distant tree lines and ruins | 110–160 | not yet made |
-| **Mid** | Nearer trees and roots | 55–95 | trees `#3a3a38`–`#1e1e1c` |
+| **Sky** | Sky and fog glow | 190–215 at the centre, ~90 at the edges | `#cfcfcb` → `#5c5c58` |
+| **Far** | Distant tree lines and ruins | 130–170 (style frame: ~146) | not yet made |
+| **Mid** | Nearer trees and roots | 85–125 (style frame: ~113) | not yet made |
 | **Play** | Ground, walls, crates, characters, enemies | **0–12** | `#050505` |
 | **Near** (optional) | Blurred foreground grass and branches in front of the player | 0–8, blurred | not yet made |
 

@@ -83,8 +83,8 @@ export class GameScene extends Phaser.Scene {
     const tex = this.textures.createCanvas('bg', WIDTH, HEIGHT);
     const ctx = tex.getContext();
     const g = ctx.createRadialGradient(WIDTH / 2, HEIGHT / 2, 50, WIDTH / 2, HEIGHT / 2, WIDTH * 0.7);
-    g.addColorStop(0, '#9a9a94');
-    g.addColorStop(1, '#1c1c1a');
+    g.addColorStop(0, '#cfcfcb');   // matches style frame sky (~205)
+    g.addColorStop(1, '#5c5c58');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     tex.refresh();
