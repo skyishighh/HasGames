@@ -85,13 +85,13 @@ export class Atmosphere {
     const ctx = t.getContext();
     const rng = new Phaser.Math.RandomDataGenerator(['fog']);
     for (let i = 0; i < 18; i++) {
-      const x = rng.between(0, 512), y = rng.between(60, 220), r = rng.between(60, 140);
-      for (const dx of [-512, 0, 512]) {                      // wrap so the tile repeats seamlessly
-        const g = ctx.createRadialGradient(x + dx, y, 0, x + dx, y, r);
+      const x = rng.between(0, 512), y = rng.between(0, 256), r = rng.between(60, 140);
+      for (const dx of [-512, 0, 512]) for (const dy of [-256, 0, 256]) {   // wrap both ways: no seams or bands
+        const g = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
         g.addColorStop(0, 'rgba(210,210,200,0.5)');
         g.addColorStop(1, 'rgba(210,210,200,0)');
         ctx.fillStyle = g;
-        ctx.fillRect(x + dx - r, y - r, r * 2, r * 2);
+        ctx.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
       }
     }
     t.refresh();
