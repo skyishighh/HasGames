@@ -20,11 +20,15 @@ const DIR = 'assets/bg/';
 const DEPTH = -9;          // behind the vault (-5) and terrain (1), above the flat bg (-10)
 const FEATHER = 0.2;       // cross-fade width between repeats, as a fraction of image width
 const FADE = 300;          // px: how far outside a zone its backgrounds are still (fading) visible
-const LAYERS = [           // draw order back to front, with parallax factor (0 = fixed to the screen)
-  { slot: 'sky', factor: 0 },
-  { slot: 'far', factor: 0.2 },
-  { slot: 'mid', factor: 0.45 },
+// Draw order back to front. factor = parallax (0 = fixed to the screen). The rest is the Limbo-style
+// depth of field, baked into the texture once at load: the further away, the blurrier, flatter and
+// foggier. The play layer (terrain, characters) is never blurred, so it stays sharp and readable.
+const LAYERS = [
+  { slot: 'sky', factor: 0,    blur: 14, contrast: 0.7, brightness: 1,    fog: 0 },
+  { slot: 'far', factor: 0.2,  blur: 8,  contrast: 0.8, brightness: 1,    fog: 0.2 },
+  { slot: 'mid', factor: 0.45, blur: 4,  contrast: 1.1, brightness: 0.75, fog: 0 },
 ];
+const FOG = '215,215,210';
 
 const texKey = (file) => `bd_${file}`;
 
@@ -45,6 +49,7 @@ export class Backdrops {
   constructor(scene, level) {
     this.scene = scene;
     this.sets = [];            // { rect, objs: [] }
+    const sources = new Set();
     const bd = level.backdrops;
     if (!bd) return;
     const zones = Object.values(bd.zones ?? {});
@@ -52,15 +57,18 @@ export class Backdrops {
     const specs = zones.length ? zones : [{ rect: { x: 0, y: 0, w: level.width, h: level.height } }];
     specs.forEach((zone, zi) => {
       const objs = [];
-      LAYERS.forEach(({ slot, factor }, li) => {
-        const key = [zone[slot], bd.default?.[slot]].filter(Boolean).map(texKey).find((k) => scene.textures.exists(k));
-        if (!key) return;
+      LAYERS.forEach((layer, li) => {
+        const src = [zone[layer.slot], bd.default?.[layer.slot]].filter(Boolean).map(texKey).find((k) => scene.textures.exists(k));
+        if (!src) return;
+        sources.add(src);
+        const key = bake(scene, src, layer);
         const depth = DEPTH + li * 0.1 + zi * 0.01;
-        if (factor === 0) objs.push(this.#screenLayer(key, depth));
-        else objs.push(...this.#scrollingLayer(key, factor, zone.rect, level, depth));
+        if (layer.factor === 0) objs.push(this.#screenLayer(key, depth));
+        else objs.push(...this.#scrollingLayer(key, layer.factor, zone.rect, level, depth));
       });
       this.sets.push({ rect: zone.rect, objs });
     });
+    for (const k of sources) scene.textures.remove(k);   // only the baked copies are drawn: free the originals
     this.update();
   }
 
@@ -104,11 +112,10 @@ export class Backdrops {
     const spanW = WIDTH + (bx - ax) * f;
     const spanH = HEIGHT + (by - ay) * f;
     const x0 = ax * f, bottom = ay * f + spanH;
-    const tex = featheredKey(this.scene, key);
     const objs = [];
     let x = null;
     while (x === null || x < x0 + spanW) {
-      const img = this.scene.add.image(0, bottom, tex).setOrigin(0, 1).setScrollFactor(f).setDepth(depth);
+      const img = this.scene.add.image(0, bottom, key).setOrigin(0, 1).setScrollFactor(f).setDepth(depth);
       const s = spanH / img.height;
       img.setScale(s);
       if (x === null) x = x0 - img.width * s * FEATHER;   // first tile's fade sits just off-screen
@@ -122,22 +129,37 @@ export class Backdrops {
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
-/** A copy of the texture whose left and right FEATHER fractions fade to transparent (made once). */
-function featheredKey(scene, key) {
-  const out = `${key}_feather`;
+/**
+ * Bake a layer's look into a new canvas texture (once per image + layer): depth blur, flattened
+ * contrast and a fog wash; scrolling layers also get soft left/right edges so repeats cross-fade.
+ */
+function bake(scene, key, { slot, factor, blur, contrast, brightness, fog }) {
+  const out = `${key}_${slot}`;
   if (scene.textures.exists(out)) return out;
   const src = scene.textures.get(key).getSourceImage();
-  const t = scene.textures.createCanvas(out, src.width, src.height);
+  const w = src.width, h = src.height;
+  const t = scene.textures.createCanvas(out, w, h);
   const ctx = t.getContext();
-  ctx.drawImage(src, 0, 0);
-  const g = ctx.createLinearGradient(0, 0, src.width, 0);
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(FEATHER, 'rgba(0,0,0,1)');
-  g.addColorStop(1 - FEATHER, 'rgba(0,0,0,1)');
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.globalCompositeOperation = 'destination-in';        // keep pixels, scaled by the ramp
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, src.width, src.height);
+  ctx.filter = `blur(${blur}px) contrast(${contrast}) brightness(${brightness})`;
+  // An opaque sky is drawn slightly oversized so the blur doesn't pull transparent edges inwards.
+  const pad = factor === 0 ? blur * 2 : 0;
+  ctx.drawImage(src, -pad, -pad, w + pad * 2, h + pad * 2);
+  ctx.filter = 'none';
+  if (fog) {                                                   // tint towards fog, keeping the alpha
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = `rgba(${FOG},${fog})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if (factor !== 0) {                                          // soft sides for cross-faded tiling
+    const g = ctx.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(FEATHER, 'rgba(0,0,0,1)');
+    g.addColorStop(1 - FEATHER, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
   t.refresh();
   return out;
 }
