@@ -202,20 +202,88 @@ const WARDEN = {
   ],
 };
 
-// ================================================== ANCHOR, WEAVER (original layout, moved by DX)
+// ==================================================================== ANCHOR — The Cliff
+// Top right (y 0–940), walking LEFT against the wind from x 20000 to the chasm. Beats (x ranges):
+// 1 explore 18400–20000 · 2 plant (wind) 17200–18400 · 3 explore 16000–17200 · 4 movement in gusts
+// 15000–16000 · 5 lever 14200–15000 · 6 slam through debris 13600–14200 · 7 slam onto a hidden plate
+// → drawbridge 12800–13600 · 8 movement, climb back up 11800–12800 · 9 mix (plant on a plate in the
+// wind, slam) 10950–11800 · 10 viewing platform 10380.
+const ANCHOR = {
+  solids: [
+    { x: 10500, y: 940, w: 9500, h: 120 },      // bedrock between the Anchor and the Weaver
+    { x: 18400, y: 700, w: 1600, h: 240 },      // 1 · cliff top
+    { x: 19200, y: 670, w: 60, h: 30 },         // rocks
+    { x: 18800, y: 660, w: 100, h: 40 },
+    { x: 17200, y: 700, w: 1200, h: 240 },      // 2 · windy stretch
+    { x: 16000, y: 700, w: 1200, h: 240 },      // 3 · quiet plateau
+    { x: 16400, y: 420, w: 120, h: 20 },        // far pillar top (someone stands there)
+    { x: 15600, y: 700, w: 300, h: 240 },       // 4 · gusts over gaps
+    { x: 15500, y: 660, w: 100, h: 280 },       // step
+    { x: 15100, y: 700, w: 400, h: 240 },
+    { x: 14200, y: 700, w: 800, h: 240 },       // 5–6 · lever and gate
+    { x: 13600, y: 700, w: 500, h: 20 },        // 6 · thin slab over the tunnel
+    { x: 13960, y: 400, w: 40, h: 300 },        // wall: the upper path is closed
+    { x: 13530, y: 880, w: 670, h: 60 },        // tunnel floor
+    { x: 13400, y: 920, w: 130, h: 20 },        // 7 · pocket bottom (plate under the debris)
+    { x: 13300, y: 880, w: 100, h: 60 },
+    { x: 12200, y: 880, w: 850, h: 60 },        // 8 · beyond the drawbridge
+    { x: 12500, y: 840, w: 100, h: 100 },       // steps back up to the cliff top
+    { x: 12350, y: 800, w: 150, h: 140 },
+    { x: 12200, y: 760, w: 150, h: 180 },
+    { x: 11400, y: 700, w: 800, h: 240 },       // 9 · windy cliff with a plate and a gate
+    { x: 10500, y: 700, w: 800, h: 20 },        // slab over the final tunnel
+    { x: 11260, y: 400, w: 40, h: 300 },        // wall: the upper path is closed
+    { x: 10380, y: 880, w: 1020, h: 60 },       // final tunnel → VIEWING PLATFORM (Anchor)
+    { x: 10380, y: 846, w: 6, h: 34 },          // railing post
+  ],
+  hazards: [
+    { x: 19920, y: 660, w: 80, h: 280 },        // cliff edge behind the start
+    { x: 15900, y: 880, w: 100, h: 60 },
+    { x: 15000, y: 880, w: 100, h: 60 },
+    { x: 13050, y: 900, w: 250, h: 40 },        // under the drawbridge
+  ],
+  wind: [
+    { x: 17300, y: 400, w: 1100, h: 300, push: 300, on: 1.4, off: 1.8, startCalm: true },  // 2
+    { x: 15000, y: 400, w: 1000, h: 300, push: 300, on: 1.3, off: 1.5 },                   // 4
+    { x: 11300, y: 400, w: 900, h: 300, push: 320, on: 1.2, off: 1.4 },                    // 9
+  ],
+  plates: [
+    { id: 'pa1', x: 13420, y: 912, w: 90, opens: 'bra1', latch: true },  // 7 · hidden under debris
+    { id: 'pa2', x: 11700, y: 692, w: 90, opens: 'ga2', latch: true },   // 9 · in the wind
+  ],
+  debris: [
+    { id: 'da1', x: 14100, y: 700, w: 100, h: 40 },  // 6 · slam through into the tunnel
+    { id: 'da2', x: 13400, y: 880, w: 130, h: 40 },  // 7 · covers the plate
+    { id: 'da3', x: 11300, y: 700, w: 100, h: 40 },  // 9 · into the final tunnel
+  ],
+  levers: [{ id: 'la1', x: 14850, y: 700, opens: 'ga1' }],
+  gates: [
+    { id: 'ga1', x: 14600, y: 500, w: 24, h: 200 },                 // 5
+    { id: 'bra1', x: 13050, y: 880, w: 250, h: 14, bridge: true },  // 7 · drawbridge (plate)
+    { id: 'ga2', x: 11550, y: 500, w: 24, h: 200 },                 // 9
+  ],
+  fragments: [
+    { role: 'anchor', ability: 'plant', x: 18450, y: 700 },
+    { role: 'anchor', ability: 'slam', x: 14450, y: 700 },
+  ],
+  checkpoints: [
+    { x: 19760, y: 700 }, { x: 18900, y: 700 }, { x: 18350, y: 700 }, { x: 17100, y: 700 }, { x: 16300, y: 700 },
+    { x: 15750, y: 700 }, { x: 14950, y: 700 }, { x: 14250, y: 700 }, { x: 14000, y: 880 }, { x: 13350, y: 880 },
+    { x: 12900, y: 880 }, { x: 11800, y: 700 }, { x: 11000, y: 880 },
+  ],
+  hollows: [
+    { x: 16460, y: 420, type: 'watch', radius: 300 },               // 3 · on the far pillar in the storm
+    { x: 12300, y: 880, type: 'watch', radius: 220 },               // 8 · at the end of the tunnel
+  ],
+  triggers: [
+    { x: 16700, y: 500, w: 100, h: 200, action: 'shake' },          // 3 · thunder
+    { x: 10380, y: 720, w: 120, h: 160, action: 'reveal' },
+  ],
+};
+
+// ========================================================= WEAVER (original layout, moved by DX)
 const REST = {
   solids: [
-    // --- rock layer separating the right-hand zones
-    { x: 3500, y: 940, w: 2500, h: 120 },
-
-    // ================= ANCHOR — The Cliff =================
-    { x: 3950, y: 700, w: 150, h: 240 },
-    { x: 4350, y: 700, w: 1570, h: 240 },       // cliff top (pit at the far right edge)
-    { x: 3500, y: 700, w: 350, h: 20 },         // tunnel ceiling
-    { x: 3380, y: 880, w: 570, h: 60 },         // tunnel floor → VIEWING PLATFORM (Anchor)
-    { x: 3380, y: 846, w: 6, h: 34 },           // railing post
-    { x: 3700, y: 400, w: 40, h: 300 },         // wall: the top path is closed, go down through the debris
-
     // ================= WEAVER — The Dark Tunnel =================
     { x: 3500, y: 1060, w: 2500, h: 240 },      // tunnel ceiling
     { x: 5660, y: 1540, w: 340, h: 60 },        // start floor
@@ -230,19 +298,9 @@ const REST = {
 
   // Falling into these respawns you at your checkpoint.
   hazards: [
-    { x: 4100, y: 880, w: 250, h: 60 },         // gap under the Anchor's bridge
-    { x: 5920, y: 660, w: 80, h: 280 },         // cliff edge behind the Anchor
     { x: 4000, y: 1580, w: 300, h: 20 },        // Weaver: pits under the long bridges
     { x: 4350, y: 1580, w: 290, h: 20 },
   ],
-
-  // Anchor
-  wind: [
-    { x: 5300, y: 400, w: 620, h: 300, push: 300, on: 1.4, off: 1.8, startCalm: true },
-    { x: 4600, y: 400, w: 700, h: 300, push: 360, on: 1.3, off: 1.3 },
-  ],
-  plates: [{ id: 'p1', x: 4400, y: 692, w: 90, opens: 'br1', latch: true }], // stays down: the Anchor crosses alone
-  debris: [{ id: 'd1', x: 3850, y: 700, w: 100, h: 40 }],   // Anchor slam breaks it
 
   // Weaver
   nodes: [{ id: 'n1', x: 5300, y: 1360, opens: 'g2', latch: true }],
@@ -256,19 +314,15 @@ const REST = {
 
   gates: [
     { id: 'g2', x: 5200, y: 1300, w: 24, h: 240 },                 // Weaver door (light the node)
-    { id: 'br1', x: 4100, y: 700, w: 250, h: 14, bridge: true },   // Anchor drawbridge (heavy plate)
   ],
 
   fragments: [
-    { role: 'anchor', ability: 'plant', x: 5715, y: 700 },
-    { role: 'anchor', ability: 'slam', x: 4020, y: 700 },
     { role: 'weaver', ability: 'beam', x: 5790, y: 1540 },
     { role: 'weaver', ability: 'flare', x: 3975, y: 1540 },
   ],
 
   // Respawn points (feet position). Touching one makes it your checkpoint.
   checkpoints: [
-    { x: 5760, y: 700 }, { x: 5250, y: 700 }, { x: 4500, y: 700 }, { x: 4050, y: 700 },
     { x: 5850, y: 1540 }, { x: 5150, y: 1540 }, { x: 4670, y: 1540 }, { x: 4325, y: 1540 }, { x: 3970, y: 1540 },
   ],
 
@@ -279,23 +333,21 @@ const REST = {
 
   // Wordless atmosphere: a Hollow watching (vanishes when you get close).
   hollows: [
-    { x: 4720, y: 700, type: 'watch', radius: 200 },                // Anchor: standing in the storm
     { x: 3790, y: 1540, type: 'dark', radius: 60 },                 // Weaver: revealed by the flare
   ],
 
   // Client-side scripted moments.
   triggers: [
-    { x: 3380, y: 720, w: 120, h: 160, action: 'reveal' },
     { x: 3380, y: 1300, w: 120, h: 240, action: 'reveal' },
     { x: 3880, y: 1300, w: 60, h: 240, action: 'shake' },           // Weaver: "a sound in the dark"
   ],
 };
 
-const merged = (key) => [...(SCOUT[key] ?? []), ...(WARDEN[key] ?? []), ...shift(REST[key] ?? [])];
+const merged = (key) => [...(SCOUT[key] ?? []), ...(WARDEN[key] ?? []), ...(ANCHOR[key] ?? []), ...shift(REST[key] ?? [])];
 
 export default {
   name: 'The Awakening',
-  width: 6000 + DX,
+  width: 20000,
   height: 1600,
   parallax: false,
 
@@ -308,7 +360,7 @@ export default {
     zones: {
       pit:      { rect: { x: 0, y: 0, w: 2500 + DX, h: 1000 },  sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
       collapse: { rect: { x: 0, y: 1000, w: 2500 + DX, h: 600 },    sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
-      cliff:    { rect: { x: 3500 + DX, y: 0, w: 2500, h: 1000 }, sky: 'cliff_sky.png',  far: 'cliff_far.png',    mid: 'cliff_mid.png' },
+      cliff:    { rect: { x: 10500, y: 0, w: 9500, h: 1000 }, sky: 'cliff_sky.png',    far: 'cliff_far.png',    mid: 'cliff_mid.png' },
       tunnel:   { rect: { x: 3500 + DX, y: 1000, w: 2500, h: 600 }, sky: 'tunnel_sky.png', far: 'tunnel_far.png', mid: 'tunnel_mid.png' },
       chasm:    { rect: { x: 2500 + DX, y: 0, w: 1000, h: 1600 } },   // uses the default forest set
     },
@@ -317,7 +369,7 @@ export default {
   spawns: {
     scout: { x: 150, y: 900 },
     warden: { x: 150, y: 1540 },
-    anchor: { x: 5760 + DX, y: 700 },
+    anchor: { x: 19760, y: 700 },
     weaver: { x: 5850 + DX, y: 1540 },
   },
 
