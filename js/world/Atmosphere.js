@@ -4,6 +4,7 @@
 import { WIDTH, HEIGHT } from '../config.js';
 
 const DARK_W = 480, DARK_H = 270;   // half resolution
+export const LENS_BLUR = !new URLSearchParams(location.search).has('nolens');
 
 export class Atmosphere {
   constructor(scene, level) {
@@ -19,6 +20,16 @@ export class Atmosphere {
     // Fog drifts behind the play area (above backdrops, below terrain), so near-black stays near-black.
     this.fog = this.#screenLayer(scene.add.tileSprite(0, 0, WIDTH, HEIGHT, this.#fogTexture()), -2, 1).setAlpha(0.18);
     this.#screenLayer(scene.add.image(0, 0, this.#vignetteTexture()), 24, 1);
+    // Limbo's lens: the screen goes out of focus towards the corners. A cheap GPU blur of the whole
+    // view is kept only where a radial mask is opaque (the edges), then blended over the sharp image,
+    // so the centre, where players are, stays crisp. Runs every frame; add ?nolens to the URL to
+    // turn it off (e.g. to compare speed on a slow machine).
+    if (LENS_BLUR) {
+      const lens = scene.cameras.main.filters.external.addParallelFilters();
+      lens.top.addBlur(0, 2, 2, 1.5, 0xffffff, 3);           // low quality, small offsets, few steps
+      lens.top.addMask(this.#lensMaskTexture());
+      this.lens = lens;
+    }
     this.grain = this.#screenLayer(scene.add.tileSprite(0, 0, WIDTH, HEIGHT, this.#grainTexture()), 25, 1)
       .setAlpha(0.12).setBlendMode(Phaser.BlendModes.MULTIPLY);   // multiply: grain never lifts black
   }
@@ -110,6 +121,21 @@ export class Atmosphere {
       img.data[i + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
+    t.refresh();
+    return key;
+  }
+
+  /** White where the lens blur applies: clear in the middle, opaque towards the corners. */
+  #lensMaskTexture() {
+    const key = 'lensmask';
+    if (this.scene.textures.exists(key)) return key;
+    const t = this.scene.textures.createCanvas(key, WIDTH / 4, HEIGHT / 4);
+    const ctx = t.getContext(), w = WIDTH / 4, h = HEIGHT / 4;
+    const g = ctx.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, w * 0.6);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(1, 'rgba(255,255,255,1)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
     t.refresh();
     return key;
   }
