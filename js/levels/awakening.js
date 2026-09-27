@@ -24,7 +24,6 @@ const shift = (list) => list.map((o) => ({ ...o, x: o.x + DX }));
 const SCOUT = {
   solids: [
     { x: 0, y: 940, w: 9500, h: 120 },          // bedrock under the whole Scout zone
-    { x: 0, y: 1060, w: DX, h: 540 },           // solid earth left of the Warden zone
 
     // 1 · Explore: wake in the dark, uneven ground, a figure on a far ledge.
     { x: 0, y: 900, w: 3740, h: 40 },           // cave floor (beats 1–4, runs under the shaft wall)
@@ -127,22 +126,87 @@ const SCOUT = {
   ],
 };
 
-// ============================================= WARDEN, ANCHOR, WEAVER (original layout, moved by DX)
+// ================================================================== WARDEN — The Collapse
+// Underground, below the Scout (y 1060–1600). Beats (x ranges): 1 explore 0–1400 · 2 push 1400–2200 ·
+// 3 explore 2200–3400 · 4 lift & throw 3400–4200 · 5 movement 4200–5200 · 6 lever 5200–5700 ·
+// 7 smash 5700–6300 · 8 smash + lever 6300–7000 · 9 movement + harmless crusher 7000–7800 ·
+// 10 brace 7800–8400 · 11 mix (smash, brace, push) 8400–9400 · 12 viewing platform 9400–9640.
+const WARDEN = {
+  solids: [
+    { x: 0, y: 1060, w: 400, h: 380 },          // 1 · collapsed iron: low ceiling over the start
+    { x: 0, y: 1540, w: 1800, h: 60 },          // start hall floor
+    { x: 500, y: 1500, w: 80, h: 40 },          // rubble
+    { x: 850, y: 1490, w: 120, h: 50 },
+    { x: 1800, y: 1440, w: 2400, h: 160 },      // 2 · raised floor (100 up: push the block to reach it)
+    { x: 2600, y: 1400, w: 100, h: 40 },        // 3 · rubble on the long walk
+    { x: 3000, y: 1390, w: 80, h: 50 },
+    { x: 3400, y: 1060, w: 900, h: 180 },       // 4 · low ceiling over the switch room
+    { x: 4290, y: 1440, w: 250, h: 160 },       // 5 · movement: gap, step up, wider gap
+    { x: 4540, y: 1380, w: 200, h: 220 },
+    { x: 4850, y: 1440, w: 1150, h: 160 },      // 5–7 · long floor
+    { x: 6000, y: 1440, w: 1000, h: 160 },      // 8
+    { x: 7000, y: 1540, w: 2640, h: 60 },       // 9–12 · lower hall floor (drop down)
+    { x: 7150, y: 1500, w: 80, h: 40 },         // rubble
+    { x: 7300, y: 1060, w: 1350, h: 180 },      // ceiling over the crusher hall
+    { x: 8900, y: 1440, w: 400, h: 100 },       // 11 · step (100 up: push the block)
+    { x: 9634, y: 1506, w: 6, h: 34 },          // railing post at the chasm edge
+  ],
+  hazards: [
+    { x: 4200, y: 1560, w: 90, h: 40 },
+    { x: 4740, y: 1560, w: 110, h: 40 },
+  ],
+  blocks: [
+    { id: 'b1', x: 1600, y: 1480, w: 60, h: 60 },   // 2 · push to the raised floor
+    { id: 'b2', x: 8700, y: 1480, w: 60, h: 60 },   // 11 · push to the step
+  ],
+  crates: [{ id: 'c1', x: 3560, y: 1440 }],
+  buttons: [{ id: 's1', x: 3800, y: 1290, w: 40, h: 90, opens: 'g1' }],  // 4 · hit it with a thrown crate
+  cracked: [
+    { id: 'w1', x: 5950, y: 1240, w: 30, h: 200 },  // 7
+    { id: 'w2', x: 6400, y: 1240, w: 30, h: 200 },  // 8 · hides the lever
+    { id: 'w3', x: 8300, y: 1340, w: 30, h: 200 },  // 11
+  ],
+  crushers: [
+    { id: 'k1', x: 7400, w: 80, h: 60, top: 1240, floor: 1540, period: 6, safe: true }, // 9 · harmless: shoves you back
+    { id: 'k2', x: 8050, w: 80, h: 60, top: 1240, floor: 1540, period: 3 },             // 10 · brace to pass
+    { id: 'k3', x: 8500, w: 80, h: 60, top: 1240, floor: 1540, period: 2.5 },           // 11
+  ],
+  levers: [
+    { id: 'lw1', x: 5350, y: 1440, opens: 'gw1' },
+    { id: 'lw2', x: 6550, y: 1440, opens: 'gw2' },
+  ],
+  gates: [
+    { id: 'g1', x: 3840, y: 1240, w: 24, h: 200 },  // 4 · switch door
+    { id: 'gw1', x: 5600, y: 1240, w: 24, h: 200 }, // 6
+    { id: 'gw2', x: 6800, y: 1240, w: 24, h: 200 }, // 8
+  ],
+  fragments: [
+    { role: 'warden', ability: 'push', x: 1450, y: 1540 },
+    { role: 'warden', ability: 'lift', x: 3460, y: 1440 },
+    { role: 'warden', ability: 'smash', x: 5760, y: 1440 },
+    { role: 'warden', ability: 'brace', x: 7860, y: 1540 },
+  ],
+  checkpoints: [
+    { x: 150, y: 1540 }, { x: 1450, y: 1540 }, { x: 1850, y: 1440 }, { x: 3000, y: 1440 }, { x: 3450, y: 1440 },
+    { x: 3950, y: 1440 }, { x: 4900, y: 1440 }, { x: 5300, y: 1440 }, { x: 6100, y: 1440 }, { x: 6900, y: 1440 },
+    { x: 7100, y: 1540 }, { x: 7800, y: 1540 }, { x: 8200, y: 1540 }, { x: 9350, y: 1540 },
+  ],
+  dark: [{ x: 0, y: 1060, w: 700, h: 540, alpha: 0.5 }],
+  hollows: [
+    { x: 3200, y: 1440, type: 'watch', radius: 200, grate: true },  // 3 · behind a grate
+    { x: 7700, y: 1540, type: 'watch', radius: 220 },               // 9 · beyond the first crusher
+  ],
+  triggers: [
+    { x: 2700, y: 1300, w: 100, h: 140, action: 'shake' },          // 3 · a rumble in the collapse
+    { x: 9400, y: 1300, w: 240, h: 240, action: 'reveal' },
+  ],
+};
+
+// ================================================== ANCHOR, WEAVER (original layout, moved by DX)
 const REST = {
   solids: [
     // --- rock layer separating the right-hand zones
     { x: 3500, y: 940, w: 2500, h: 120 },
-
-    // ================= WARDEN — The Collapse =================
-    { x: 0, y: 1060, w: 400, h: 380 },          // collapsed iron: low ceiling over the start
-    { x: 400, y: 1060, w: 1740, h: 180 },       // ceiling
-    { x: 0, y: 1540, w: 700, h: 60 },           // start floor
-    { x: 700, y: 1440, w: 1060, h: 160 },       // raised floor (reach it by pushing the block)
-    { x: 1760, y: 1440, w: 40, h: 40 },
-    { x: 1920, y: 1440, w: 180, h: 40 },
-    { x: 2100, y: 1240, w: 40, h: 240 },        // wall: the only way on is down through the cracked floor
-    { x: 1760, y: 1540, w: 880, h: 60 },        // lower room floor → VIEWING PLATFORM (Warden) at the end
-    { x: 2634, y: 1506, w: 6, h: 34 },          // railing post
 
     // ================= ANCHOR — The Cliff =================
     { x: 3950, y: 700, w: 150, h: 240 },
@@ -172,17 +236,6 @@ const REST = {
     { x: 4350, y: 1580, w: 290, h: 20 },
   ],
 
-  // Warden
-  blocks: [{ id: 'b1', x: 480, y: 1480, w: 60, h: 60 }],
-  crates: [{ id: 'c1', x: 820, y: 1440 }],
-  buttons: [{ id: 's1', x: 1060, y: 1290, w: 40, h: 90, opens: 'g1' }], // switch panel beside the door: hit it with a thrown crate (stays pressed)
-  cracked: [{ id: 'w1', x: 1250, y: 1240, w: 30, h: 200 }],
-  crushers: [
-    { id: 'k1', x: 1400, w: 80, h: 60, top: 1240, floor: 1440, period: 6, safe: true }, // slow & harmless: shoves you back
-    { id: 'k2', x: 1620, w: 80, h: 60, top: 1240, floor: 1440, period: 3 },
-  ],
-  fragile: [{ id: 'f1', x: 1800, y: 1440, w: 120, h: 16 }],
-
   // Anchor
   wind: [
     { x: 5300, y: 400, w: 620, h: 300, push: 300, on: 1.4, off: 1.8, startCalm: true },
@@ -202,16 +255,11 @@ const REST = {
   ],
 
   gates: [
-    { id: 'g1', x: 1100, y: 1240, w: 24, h: 200 },                 // Warden door (crate on the switch)
     { id: 'g2', x: 5200, y: 1300, w: 24, h: 240 },                 // Weaver door (light the node)
     { id: 'br1', x: 4100, y: 700, w: 250, h: 14, bridge: true },   // Anchor drawbridge (heavy plate)
   ],
 
   fragments: [
-    { role: 'warden', ability: 'push', x: 420, y: 1540 },
-    { role: 'warden', ability: 'lift', x: 760, y: 1440 },
-    { role: 'warden', ability: 'smash', x: 1190, y: 1440 },
-    { role: 'warden', ability: 'brace', x: 1360, y: 1440 },
     { role: 'anchor', ability: 'plant', x: 5715, y: 700 },
     { role: 'anchor', ability: 'slam', x: 4020, y: 700 },
     { role: 'weaver', ability: 'beam', x: 5790, y: 1540 },
@@ -220,7 +268,6 @@ const REST = {
 
   // Respawn points (feet position). Touching one makes it your checkpoint.
   checkpoints: [
-    { x: 150, y: 1540 }, { x: 760, y: 1440 }, { x: 1330, y: 1440 }, { x: 1550, y: 1440 }, { x: 1850, y: 1540 },
     { x: 5760, y: 700 }, { x: 5250, y: 700 }, { x: 4500, y: 700 }, { x: 4050, y: 700 },
     { x: 5850, y: 1540 }, { x: 5150, y: 1540 }, { x: 4670, y: 1540 }, { x: 4325, y: 1540 }, { x: 3970, y: 1540 },
   ],
@@ -228,26 +275,23 @@ const REST = {
   // Darkness (alpha = how dark). The Weaver's light cuts through.
   dark: [
     { x: 3500, y: 1060, w: 2500, h: 540, alpha: 0.97 },
-    { x: 0, y: 1060, w: 700, h: 540, alpha: 0.5 },
   ],
 
   // Wordless atmosphere: a Hollow watching (vanishes when you get close).
   hollows: [
-    { x: 2260, y: 1540, type: 'watch', radius: 180, grate: true },  // Warden: behind a grate
     { x: 4720, y: 700, type: 'watch', radius: 200 },                // Anchor: standing in the storm
     { x: 3790, y: 1540, type: 'dark', radius: 60 },                 // Weaver: revealed by the flare
   ],
 
   // Client-side scripted moments.
   triggers: [
-    { x: 2400, y: 1300, w: 240, h: 240, action: 'reveal' },
     { x: 3380, y: 720, w: 120, h: 160, action: 'reveal' },
     { x: 3380, y: 1300, w: 120, h: 240, action: 'reveal' },
     { x: 3880, y: 1300, w: 60, h: 240, action: 'shake' },           // Weaver: "a sound in the dark"
   ],
 };
 
-const merged = (key) => [...(SCOUT[key] ?? []), ...shift(REST[key] ?? [])];
+const merged = (key) => [...(SCOUT[key] ?? []), ...(WARDEN[key] ?? []), ...shift(REST[key] ?? [])];
 
 export default {
   name: 'The Awakening',
@@ -263,7 +307,7 @@ export default {
     default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
     zones: {
       pit:      { rect: { x: 0, y: 0, w: 2500 + DX, h: 1000 },  sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
-      collapse: { rect: { x: DX, y: 1000, w: 2500, h: 600 },    sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
+      collapse: { rect: { x: 0, y: 1000, w: 2500 + DX, h: 600 },    sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
       cliff:    { rect: { x: 3500 + DX, y: 0, w: 2500, h: 1000 }, sky: 'cliff_sky.png',  far: 'cliff_far.png',    mid: 'cliff_mid.png' },
       tunnel:   { rect: { x: 3500 + DX, y: 1000, w: 2500, h: 600 }, sky: 'tunnel_sky.png', far: 'tunnel_far.png', mid: 'tunnel_mid.png' },
       chasm:    { rect: { x: 2500 + DX, y: 0, w: 1000, h: 1600 } },   // uses the default forest set
@@ -272,7 +316,7 @@ export default {
 
   spawns: {
     scout: { x: 150, y: 900 },
-    warden: { x: 150 + DX, y: 1540 },
+    warden: { x: 150, y: 1540 },
     anchor: { x: 5760 + DX, y: 700 },
     weaver: { x: 5850 + DX, y: 1540 },
   },
