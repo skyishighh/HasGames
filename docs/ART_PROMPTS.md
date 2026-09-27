@@ -3,6 +3,18 @@
 The game loads painted backgrounds from `assets/bg/`. If a file is missing, the game still runs
 without it, so you can add the images one at a time.
 
+## Step 0 — the style frame (make this first)
+
+Read `docs/ART_DIRECTION.md` first. Then generate one reference image. Save it as
+`docs/reference/style_frame.png` and attach it to every later generation.
+
+> Hand-painted 2D side-scrolling game screenshot in the style of Limbo, fully monochrome grayscale.
+> A small child silhouette, pure black with two tiny white glowing eyes, stands on a pure-black
+> forest floor with tall grass on the left third of the frame. Behind: mid-gray tree trunks with
+> hanging roots, then pale faded pines in thick fog, then a glowing pale sky. Far layers are light
+> and soft, near layers are dark and sharp. Soft film-like atmosphere, no text, no colour.
+> 1536 × 1024.
+
 ## The three layers (The Awakening)
 
 | File | What it is | Generate at | Transparent? | Moves |
