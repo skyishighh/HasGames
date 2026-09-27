@@ -75,8 +75,8 @@ const SCOUT = {
     { x: 7980, y: 120, w: 220, h: 820 },        // landing after the dash gap
 
     // 11 · Mix: crawl slot, drop, climb, final dash.
-    { x: 8200, y: 0, w: 200, h: 90 },           // low rock ceiling…
-    { x: 8200, y: 90, w: 200, h: 30, vent: true }, // …crawl-only slot under it
+    { x: 8200, y: 0, w: 200, h: 80 },           // low rock ceiling (above the Scout's head)…
+    { x: 8200, y: 80, w: 200, h: 40, vent: true }, // …crawl-only slot under it
     { x: 8200, y: 120, w: 200, h: 820 },
     { x: 8400, y: 400, w: 260, h: 540 },        // drop down
     { x: 8700, y: 120, w: 300, h: 820 },        // climb back up (mesh on its left face)
