@@ -13,6 +13,7 @@ import { Scripted } from '../world/Scripted.js';
 import { SnapshotBuffer } from '../snapshot-buffer.js';
 import { enableSubstepping } from '../world/physics-substep.js';
 import { preloadBackdrops, Backdrops } from '../art/Backdrops.js';
+import { Foreground } from '../art/Foreground.js';
 import gym from '../levels/gym.js';
 import awakening from '../levels/awakening.js';
 
@@ -62,6 +63,7 @@ export class GameScene extends Phaser.Scene {
     this.level = new Level(this, this.levelData, isHost);
     this.atmosphere = new Atmosphere(this, this.level);
     this.backdrops = new Backdrops(this, this.levelData);
+    new Foreground(this, this.levelData);
     this.scripted = new Scripted(this, this.levelData);
     this.cameras.main.setBounds(0, 0, this.levelData.width, this.levelData.height);
     this.beamGfx = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);

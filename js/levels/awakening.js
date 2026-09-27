@@ -12,6 +12,9 @@ export default {
   height: 1600,
   parallax: false,
 
+  // Blurred near-black trunks in front of the play area (js/art/Foreground.js).
+  foreground: { factor: 1.4, spacing: [1100, 1800] },
+
   // Painted backgrounds in assets/bg/ (see docs/ART_PROMPTS.md). Each zone has its own set and they
   // cross-fade at the borders; a missing zone image falls back to the default one.
   backdrops: {
