@@ -12,12 +12,10 @@ export default {
   height: 1600,
   parallax: false,
 
-  // Blurred near-black trunks in front of the play area (js/art/Foreground.js).
-  foreground: { factor: 1.4, spacing: [1100, 1800] },
-
   // Painted backgrounds in assets/bg/ (see docs/ART_PROMPTS.md). Each zone has its own set and they
   // cross-fade at the borders; a missing zone image falls back to the default one.
   backdrops: {
+    foreground: true,   // blurred black silhouettes made from each zone's mid image, in front of play
     default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
     zones: {
       pit:      { rect: { x: 0, y: 0, w: 2500, h: 1000 },    sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
