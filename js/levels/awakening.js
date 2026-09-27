@@ -12,12 +12,18 @@ export default {
   height: 1600,
   parallax: false,
 
-  // Painted background layers in assets/bg/ (see docs/ART_PROMPTS.md). Missing files are skipped.
-  backdrops: [
-    { key: 'sky', files: ['awakening_sky.png'], factor: 0 },
-    { key: 'far', files: ['awakening_far.png'], factor: 0.2 },
-    { key: 'mid', files: ['awakening_mid.png'], factor: 0.45 },
-  ],
+  // Painted backgrounds in assets/bg/ (see docs/ART_PROMPTS.md). Each zone has its own set and they
+  // cross-fade at the borders; a missing zone image falls back to the default one.
+  backdrops: {
+    default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
+    zones: {
+      pit:      { rect: { x: 0, y: 0, w: 2500, h: 1000 },    sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
+      collapse: { rect: { x: 0, y: 1000, w: 2500, h: 600 },  sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
+      cliff:    { rect: { x: 3500, y: 0, w: 2500, h: 1000 }, sky: 'cliff_sky.png',    far: 'cliff_far.png',    mid: 'cliff_mid.png' },
+      tunnel:   { rect: { x: 3500, y: 1000, w: 2500, h: 600 }, sky: 'tunnel_sky.png', far: 'tunnel_far.png',   mid: 'tunnel_mid.png' },
+      chasm:    { rect: { x: 2500, y: 0, w: 1000, h: 1600 } },   // uses the default forest set
+    },
+  },
 
   spawns: {
     scout: { x: 150, y: 900 },

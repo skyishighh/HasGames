@@ -12,7 +12,7 @@ import { Atmosphere } from '../world/Atmosphere.js';
 import { Scripted } from '../world/Scripted.js';
 import { SnapshotBuffer } from '../snapshot-buffer.js';
 import { enableSubstepping } from '../world/physics-substep.js';
-import { preloadBackdrops, createBackdrops } from '../art/Backdrops.js';
+import { preloadBackdrops, Backdrops } from '../art/Backdrops.js';
 import gym from '../levels/gym.js';
 import awakening from '../levels/awakening.js';
 
@@ -61,7 +61,7 @@ export class GameScene extends Phaser.Scene {
     this.#createBackground();
     this.level = new Level(this, this.levelData, isHost);
     this.atmosphere = new Atmosphere(this, this.level);
-    createBackdrops(this, this.levelData);
+    this.backdrops = new Backdrops(this, this.levelData);
     this.scripted = new Scripted(this, this.levelData);
     this.cameras.main.setBounds(0, 0, this.levelData.width, this.levelData.height);
     this.beamGfx = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
@@ -321,6 +321,7 @@ export class GameScene extends Phaser.Scene {
       if (s.flare) { lights.push({ x: s.x, y: s.y - 20, r: 220, a: 1 }); flares.push({ x: s.x, y: s.y - 20 }); }
     }
     this.atmosphere.update(time, lights, beams);
+    this.backdrops.update();
     this.bg.setScale(1 / this.cameras.main.zoom);
     const me = this.views.get(this.localControl);
     this.scripted.update(time, dt, me ? { x: me.x, y: me.y } : null, flares);
