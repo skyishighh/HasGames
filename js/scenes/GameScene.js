@@ -498,7 +498,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: ring, radius: 70 + i * 30, alpha: 0, duration: 600, delay: i * 120, onComplete: () => ring.destroy() });
     }
     const view = this.views.get(id);
-    if (view) this.tweens.add({ targets: view.gfx, alpha: 0.2, duration: 60, yoyo: true, repeat: 4 });
+    if (view) this.tweens.add({ targets: [view.gfx, view.soft], alpha: 0.2, duration: 60, yoyo: true, repeat: 4 });
     if (id === this.localControl) this.#showHint(id, ability);
   }
 
