@@ -1,9 +1,17 @@
-// Visual representation of a player: a role-specific placeholder silhouette.
-// Purely cosmetic — collisions use the host's invisible hitbox — so this can later
-// be swapped for real (AI-generated, cut-out animated) art without touching physics.
+// Player visuals: a jointed, hand-drawn-looking silhouette per role, animated procedurally from the
+// snapshot state (movement, air, crouch, climb, brace, carry, plant, beam). Purely cosmetic — the
+// host's invisible hitbox does the physics — so real art can replace this later without touching it.
 import { ROLES } from '../roles.js';
 
 const INK = 0x050505;
+
+// Body proportions per role (in px). legs + torso + head ≈ hitbox height.
+const SHAPES = {
+  scout:  { leg: 13, torso: 10, headR: 6.5, hip: 3, shoulder: 5, limb: 2.4, arm: 11 },
+  warden: { leg: 16, torso: 18, headR: 7.5, hip: 7, shoulder: 12, limb: 5,   arm: 17 },
+  weaver: { leg: 16, torso: 14, headR: 6,   hip: 3, shoulder: 5, limb: 2.4, arm: 13 },
+  anchor: { leg: 15, torso: 15, headR: 7,   hip: 5, shoulder: 9, limb: 4,   arm: 14 },
+};
 
 export class PlayerView {
   constructor(scene, name, isLocal) {
@@ -14,55 +22,142 @@ export class PlayerView {
     }).setOrigin(0.5, 1).setDepth(3);
     this.x = 0;
     this.y = 0;
+    this.phase = 0;        // walk / climb cycle
+    this.vx = 0;           // smoothed on-screen velocity
+    this.vy = 0;
+    this.last = null;      // { x, y, t }
   }
 
-  /** s: player snapshot — x = center, y = feet. */
+  /** s: player snapshot — x = centre, y = feet. */
   applyState(s) {
+    const now = performance.now();
+    const moved = this.last ? Math.abs(s.x - this.last.x) : 0;       // distance travelled this frame
+    const climbed = this.last ? Math.abs(s.y - this.last.y) : 0;
+    if (this.last) {
+      const dt = Math.max(1, now - this.last.t) / 1000;
+      this.vx += ((s.x - this.last.x) / dt - this.vx) * 0.35;
+      this.vy += ((s.y - this.last.y) / dt - this.vy) * 0.35;
+    }
+    this.last = { x: s.x, y: s.y, t: now };
     this.x = s.x;
     this.y = s.y;
+
     const r = ROLES[s.role] ?? ROLES.scout;
-    const h = s.crouch ? r.crouchH : r.h;
-    const w = r.w;
+    const k = SHAPES[s.role] ?? SHAPES.scout;
     const f = s.facing === -1 ? -1 : 1;
+    const speed = Math.abs(this.vx);
+    const air = Math.abs(this.vy) > 40 && !s.climb && !s.ride;
+    const crouch = !!s.crouch;
+
+    // Advance the walk cycle by distance travelled (one stride ≈ 55 px), so feet don't slide at any fps.
+    if (s.climb) this.phase += climbed * (Math.PI * 2 / 40);
+    else if (!air && moved < 60) this.phase += moved * (Math.PI * 2 / 55);
+    const swing = Math.min(1, speed / r.speed) * (s.sprint ? 0.95 : 0.7);
+
     const g = this.gfx.clear();
-    const top = s.y - h;
-    const headR = Math.max(6, w * 0.38);
-
     g.fillStyle(INK, 1);
-    if (s.role === 'warden') {
-      g.fillRect(s.x - w / 2, top + headR, w, h - headR);                 // broad torso
-      g.fillCircle(s.x, top + headR * 0.9, headR);
-      g.fillRect(s.x - w / 2 - 4, top + headR + 4, 5, h * 0.45);          // heavy arms
-      g.fillRect(s.x + w / 2 - 1, top + headR + 4, 5, h * 0.45);
-    } else if (s.role === 'anchor') {
-      g.fillRect(s.x - w / 2, top + headR, w, h - headR);
-      g.fillCircle(s.x, top + headR * 0.9, headR * 0.9);
-      // the anchor carried on the back (or driven into the ground when planted)
-      const ax = s.x - f * (w / 2 + 3);
-      if (s.planted) {
-        g.fillRect(s.x + f * (w / 2 + 2) - 2, top + 6, 4, h + 8);
-        g.fillTriangle(s.x + f * (w / 2 + 2) - 7, s.y + 8, s.x + f * (w / 2 + 2) + 7, s.y + 8, s.x + f * (w / 2 + 2), s.y + 16);
-      } else {
-        g.fillRect(ax - 2, top + 4, 4, h * 0.7);
-        g.fillTriangle(ax - 7, top + h * 0.7, ax + 7, top + h * 0.7, ax, top + h * 0.7 + 8);
+
+    // --- skeleton ---
+    const legLen = k.leg * (crouch ? 0.55 : 1);
+    const hipY = s.y - legLen - (air ? 2 : 0);
+    const lean = crouch ? 0.9 : Math.min(0.35, speed / r.speed * 0.25) + (s.dash ? 0.5 : 0);
+    const torsoTopX = s.x + f * lean * k.torso * 0.6;
+    const torsoTopY = hipY - k.torso * (crouch ? 0.55 : 1);
+    const headX = torsoTopX + f * (crouch ? 4 : 1);
+    const headY = torsoTopY - k.headR * 0.9;
+
+    // --- legs ---
+    const legs = [0, Math.PI];
+    for (const off of legs) {
+      let a1, bend;
+      if (s.planted) { a1 = (off ? -1 : 1) * 0.45; bend = 0.15; }
+      else if (air) { a1 = (off ? 0.5 : -0.2) * f; bend = 0.9; }
+      else if (s.climb) { a1 = Math.sin(this.phase + off) * 0.35; bend = 0.6; }
+      else { a1 = Math.sin(this.phase + off) * swing * f; bend = crouch ? 1.4 : Math.max(0, Math.cos(this.phase + off)) * swing * 1.1 + 0.08; }
+      const hipX = s.x + (off ? -1 : 1) * k.hip * 0.3;
+      const kx = hipX + Math.sin(a1) * legLen * 0.5, ky = hipY + Math.cos(a1) * legLen * 0.5;
+      const a2 = a1 - bend * f;
+      const fx = kx + Math.sin(a2) * legLen * 0.5, fy = Math.min(s.y, ky + Math.cos(a2) * legLen * 0.5);
+      this.#limb(g, hipX, hipY, kx, ky, fx, fy, k.limb * (s.role === 'anchor' ? 1.1 : 1));
+      if (s.role === 'anchor' || s.role === 'warden') g.fillEllipse(fx + f * 2, fy - 1, k.limb * 2.6, k.limb * 1.4); // heavy boots
+    }
+
+    // --- torso ---
+    const sw = k.shoulder, hw = k.hip;
+    g.fillPoints([
+      { x: s.x - hw, y: hipY + 2 }, { x: s.x + hw, y: hipY + 2 },
+      { x: torsoTopX + sw, y: torsoTopY + 2 }, { x: torsoTopX - sw, y: torsoTopY + 2 },
+    ], true);
+    if (s.role === 'weaver') {                                     // cloak flaring behind while moving
+      const flare = Math.min(1, speed / r.speed) * 10 + (air ? 6 : 0);
+      g.fillTriangle(torsoTopX - f * 2, torsoTopY + 2, s.x - f * (6 + flare), s.y - 2, s.x + f * 4, hipY + 6);
+    }
+    if (s.role === 'anchor') this.#anchorProp(g, s, torsoTopX, torsoTopY, hipY, f);
+
+    // --- arms ---
+    const shY = torsoTopY + 3;
+    for (const side of [-1, 1]) {
+      const shX = torsoTopX + side * sw * 0.8;
+      let hx, hy;
+      if (s.brace || s.carry) { hx = shX + side * 2; hy = shY - k.arm; }                         // arms up
+      else if (s.climb) { const up = Math.sin(this.phase + (side > 0 ? 0 : Math.PI)); hx = shX; hy = shY - k.arm * (0.6 + 0.4 * up); }
+      else if (Array.isArray(s.beam) && side === f) {                                           // point along the beam
+        const [, , bx, by] = s.beam; const a = Math.atan2(by - shY, bx - shX);
+        hx = shX + Math.cos(a) * k.arm; hy = shY + Math.sin(a) * k.arm;
+      } else if (air) { hx = shX + side * k.arm * 0.5; hy = shY - k.arm * 0.4; }
+      else { const a = Math.sin(this.phase + (side === f ? Math.PI : 0)) * swing * 0.9; hx = shX + Math.sin(a) * k.arm * f; hy = shY + Math.cos(a) * k.arm * (crouch ? 0.7 : 1); }
+      const ex = (shX + hx) / 2 + side * 1.5, ey = (shY + hy) / 2 + 2;
+      this.#limb(g, shX, shY, ex, ey, hx, hy, k.limb * 0.85);
+      if (s.role === 'weaver' && (!s.ab || s.ab.includes('beam'))) {                           // glowing hands = light energy
+        g.fillStyle(0xffffff, 0.15 + 0.8 * ((s.energy ?? 100) / 100)).fillCircle(hx, hy, 2.6);
+        g.fillStyle(INK, 1);
       }
+    }
+
+    // --- head ---
+    this.#head(g, s.role, headX, headY, k.headR, f);
+
+    this.label.setPosition(s.x, headY - k.headR - 6);
+  }
+
+  /** Two-segment limb with rounded joints (a hand-drawn line look). */
+  #limb(g, x1, y1, x2, y2, x3, y3, w) {
+    g.lineStyle(w, INK, 1).lineBetween(x1, y1, x2, y2).lineBetween(x2, y2, x3, y3);
+    g.fillCircle(x2, y2, w / 2).fillCircle(x3, y3, w / 2);
+  }
+
+  #head(g, role, x, y, R, f) {
+    g.fillStyle(INK, 1);
+    if (role === 'warden' || role === 'weaver') {                 // hooded
+      g.fillEllipse(x, y, R * 2.2, R * 2.3);
+      g.fillTriangle(x - f * R * 0.2, y - R * 1.1, x - f * R * 1.5, y - R * 0.2, x + f * R * 0.4, y - R * 0.6);
     } else {
-      g.fillRect(s.x - w / 2, top + headR, w, h - headR);
-      g.fillCircle(s.x, top + headR * 0.9, headR);
+      g.fillEllipse(x, y, R * 2, R * 2.1);
     }
-
-    // eye
-    g.fillStyle(0xffffff, 1).fillRect(s.x + f * headR * 0.4 - 1.5, top + headR * 0.7, 3, 3);
-
-    // Weaver: glowing hands show light energy (no HUD text).
-    if (s.role === 'weaver' && (!s.ab || s.ab.includes('beam'))) {
-      const a = 0.15 + 0.85 * ((s.energy ?? 100) / 100);
-      g.fillStyle(0xffffff, a).fillCircle(s.x + f * (w / 2 + 2), top + h * 0.55, 3.5);
+    if (role === 'scout') {                                        // messy hair tufts
+      for (let i = -2; i <= 2; i++) g.fillTriangle(x + i * 2.4 - 1.5, y - R * 0.6, x + i * 2.4 + 1.5, y - R * 0.6, x + i * 2.4 - f * 2, y - R - 3 - (i % 2 ? 1 : 3));
     }
-    // Warden bracing: arms raised.
-    if (s.brace) g.fillStyle(INK, 1).fillRect(s.x - w / 2, top - 14, w, 6);
+    // Limbo-style glowing eyes
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(x + f * R * 0.45, y - R * 0.1, 1.3);
+    g.fillCircle(x + f * R * 0.05, y - R * 0.05, 1.1);
+  }
 
-    this.label.setPosition(s.x, top - 6);
+  #anchorProp(g, s, tx, ty, hipY, f) {
+    g.lineStyle(3, INK, 1);
+    if (s.planted) {                                               // driven into the ground in front
+      const ax = s.x + f * 14;
+      g.lineBetween(ax, ty - 2, ax, s.y + 8);
+      g.fillTriangle(ax - 7, s.y + 4, ax + 7, s.y + 4, ax, s.y + 12);
+      g.lineBetween(ax - 6, ty + 4, ax + 6, ty + 4);
+    } else {                                                       // carried on the back
+      const ax = tx - f * 8;
+      g.lineBetween(ax, ty - 4, ax, hipY + 6);
+      g.lineBetween(ax - 5, ty + 1, ax + 5, ty + 1);
+      g.lineStyle(2.5, INK, 1);
+      g.beginPath(); g.arc(ax, hipY + 2, 6, 0.2, Math.PI - 0.2, false); g.strokePath();
+    }
+    g.fillStyle(INK, 1);
   }
 
   destroy() { this.gfx.destroy(); this.label.destroy(); }

@@ -1,6 +1,8 @@
 // Builds a level from data. Visuals are created on every client; physics
 // bodies only on the host (withPhysics = true). Dynamic state is exported by
 // the host with getState() and mirrored on guests with applyState().
+import { drawTerrain, roughTexture } from '../art/rough.js';
+
 const INK = 0x050505;
 const DIM = 0x2a2a2a;
 const GATE_SLIDE_MS = 350;
@@ -25,14 +27,16 @@ export class Level {
 
     // --- Static geometry ---
     this.solids = withPhysics ? phys.add.staticGroup() : null;
+    // Solids: invisible physics rectangles; the visible terrain is painted once (hand-drawn look).
     this.vents = [];
+    this.terrain = drawTerrain(scene, data.name, data.solids, data.width, data.height);
     for (const r of data.solids) {
-      const rect = add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, INK);
+      const rect = add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, INK).setVisible(false);
       this.solids?.add(rect);
       if (r.vent) {                                   // crawl-through opening: draw its base as a grate
         rect.isVent = true;
         this.vents.push(rectOf(r));
-        const g = add.graphics();
+        const g = add.graphics().setDepth(2);
         g.fillStyle(0x3a3a3a, 1).fillRect(r.x, r.y + r.h - 24, r.w, 24);
         g.lineStyle(2, 0x111111, 1);
         for (let x = r.x + 6; x < r.x + r.w; x += 10) g.lineBetween(x, r.y + r.h - 24, x, r.y + r.h);
@@ -53,20 +57,21 @@ export class Level {
     });
 
     // --- Dynamic objects (positions synced) ---
-    this.blocks = (data.blocks ?? []).map((b) => this.#dynamicBox(b, b.w, b.h, INK, 2000));
-    this.crates = (data.crates ?? []).map((c) => ({ ...this.#dynamicBox({ ...c, x: c.x - 10, y: c.y - 20 }, 20, 20, 0x151515, 600), carriedBy: null }));
+    this.blocks = (data.blocks ?? []).map((b) => this.#dynamicBox(b, b.w, b.h, 'block', 2000));
+    this.crates = (data.crates ?? []).map((c) => ({ ...this.#dynamicBox({ ...c, x: c.x - 10, y: c.y - 20 }, 20, 20, 'crate', 600), carriedBy: null }));
 
     // --- Breakables ---
-    this.cracked = (data.cracked ?? []).map((r) => this.#breakable(r, 0x101010));
-    this.fragile = (data.fragile ?? []).map((r) => this.#breakable(r, 0x3a3a3a));
-    this.debris = (data.debris ?? []).map((r) => this.#breakable(r, 0x202020));   // broken by Anchor slam
+    this.cracked = (data.cracked ?? []).map((r) => this.#breakable(r));
+    this.fragile = (data.fragile ?? []).map((r) => this.#breakable(r));
+    this.debris = (data.debris ?? []).map((r) => this.#breakable(r));   // broken by Anchor slam
 
     // --- Crushers ---
     this.crushers = (data.crushers ?? []).map((c) => {
-      const view = add.rectangle(c.x + c.w / 2, c.top + c.h / 2, c.w, c.h, INK);
-      add.rectangle(c.x + c.w / 2, c.top - 200, 6, 400, 0x111111).setDepth(-1); // piston rod
+      const view = add.rectangle(c.x + c.w / 2, c.top + c.h / 2, c.w, c.h, INK).setVisible(false);
+      const art = add.image(view.x, view.y, roughTexture(scene, 'crusher', c.w, c.h, c.id)).setDepth(1);
+      const rod = add.image(c.x + c.w / 2, c.top - 200, roughTexture(scene, 'plain', 8, 400, 'rod')).setDepth(0);
       if (withPhysics) { phys.add.existing(view, false); view.body.setAllowGravity(false).setImmovable(true); }
-      return { data: c, view, t: 0, floor: c.floor ?? this.floorY, braced: false };
+      return { data: c, view, art, rod, t: 0, floor: c.floor ?? this.floorY, braced: false };
     });
 
     // --- Wind ---
@@ -109,7 +114,7 @@ export class Level {
   }
 
   #gate(g) {
-    const view = this.scene.add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h, INK);
+    const view = this.scene.add.image(g.x + g.w / 2, g.y + g.h / 2, roughTexture(this.scene, 'gate', g.w, g.h, g.id)).setDepth(1);
     let body = null;
     if (this.host) {
       body = this.scene.add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h).setVisible(false);
@@ -120,7 +125,8 @@ export class Level {
 
   /** Drawbridge: stands upright (not walkable) until opened, then swings down flat. */
   #bridge(g) {
-    const view = this.scene.add.rectangle(g.x + g.w, g.y + g.h / 2, g.w, g.h, INK).setOrigin(1, 0.5).setAngle(90);
+    const view = this.scene.add.image(g.x + g.w, g.y + g.h / 2, roughTexture(this.scene, 'plain', g.w, g.h, g.id))
+      .setOrigin(1, 0.5).setAngle(90).setDepth(1);
     let body = null;
     if (this.host) {
       body = this.scene.add.rectangle(g.x + g.w / 2, g.y + g.h / 2, g.w, g.h).setVisible(false);
@@ -130,23 +136,23 @@ export class Level {
     return { data: g, open: false, view, body, bridge: true };
   }
 
-  #dynamicBox(d, w, h, color, drag) {
-    const view = this.scene.add.rectangle(d.x + w / 2, d.y + h / 2, w, h, color);
+  /** Movable prop: invisible physics box + hand-drawn image that follows it (see draw()). */
+  #dynamicBox(d, w, h, style, drag) {
+    const view = this.scene.add.rectangle(d.x + w / 2, d.y + h / 2, w, h, INK).setVisible(false);
+    const art = this.scene.add.image(view.x, view.y, roughTexture(this.scene, style, w, h, d.id)).setDepth(1);
     if (this.host) {
       this.scene.physics.add.existing(view);
       view.body.setDragX(drag).setCollideWorldBounds(true);
     }
-    return { id: d.id, view };
+    return { id: d.id, view, art };
   }
 
-  #breakable(r, color) {
-    const view = this.scene.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, color);
-    // crack lines so players can read "this can break"
-    const g = this.scene.add.graphics().lineStyle(1, 0x555555, 0.8);
-    g.lineBetween(r.x + r.w * 0.3, r.y, r.x + r.w * 0.6, r.y + r.h * 0.5);
-    g.lineBetween(r.x + r.w * 0.6, r.y + r.h * 0.5, r.x + r.w * 0.35, r.y + r.h);
+  /** Breakable: invisible static box + cracked-looking image (light through the cracks). */
+  #breakable(r) {
+    const view = this.scene.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, INK).setVisible(false);
+    const art = this.scene.add.image(view.x, view.y, roughTexture(this.scene, 'cracked', r.w, r.h, r.id)).setDepth(1);
     if (this.host) this.scene.physics.add.existing(view, true);
-    return { id: r.id, data: r, view, cracks: g, broken: false, breakAt: 0 };
+    return { id: r.id, data: r, view, cracks: art, broken: false, breakAt: 0 };
   }
 
   get breakables() { return [...this.cracked, ...this.fragile, ...this.debris]; }
@@ -220,9 +226,8 @@ export class Level {
 
   // ---------- Visual helpers ----------
   #breakVisual(b) {
-    if (b.broken && !b.view.visible) return;
+    if (b.broken && !b.cracks.visible) return;
     b.broken = true;
-    b.view.setVisible(false);
     b.cracks.setVisible(false);
     if (b.view.body) b.view.body.enable = false;
   }
@@ -264,6 +269,8 @@ export class Level {
 
   /** Per-frame cosmetic updates (all clients). */
   draw(time) {
+    for (const o of [...this.blocks, ...this.crates]) o.art.setPosition(o.view.x, o.view.y);
+    for (const c of this.crushers) c.art.setPosition(c.view.x, c.view.y);
     for (const f of this.fragments) {        // slow float + pulse
       if (f.taken) continue;
       const y = f.data.y - 26 + Math.sin(time / 400 + f.data.x) * 4;

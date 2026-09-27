@@ -44,12 +44,14 @@ export class Atmosphere {
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, DARK_W, DARK_H);
     let any = false;
+    ctx.filter = 'blur(10px)';                               // soft edges: darkness fades in, no hard lines
     for (const d of this.darkRegions) {
       if (d.x > view.right || d.x + d.w < view.x || d.y > view.bottom || d.y + d.h < view.y) continue;
       ctx.fillStyle = `rgba(0,0,0,${d.alpha ?? 0.95})`;
       ctx.fillRect(tx(d.x), ty(d.y), d.w * k, d.h * DARK_H / view.height);
       any = true;
     }
+    ctx.filter = 'none';
     if (any) {
       ctx.globalCompositeOperation = 'destination-out';     // lights erase darkness
       for (const l of lights) {
