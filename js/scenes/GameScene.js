@@ -301,6 +301,7 @@ export class GameScene extends Phaser.Scene {
     this.#drawBeams();
     this.#updateMood(time, deltaMs / 1000);
     this.#updateHint(input);
+    this.#updateLeverHints();
   }
 
   /** Lighting, fog/grain and scripted moments (all clients). */
@@ -514,14 +515,29 @@ export class GameScene extends Phaser.Scene {
     const role = Object.keys(ABILITIES).find((r) => ability in ABILITIES[r]);
     const key = ABILITIES[role]?.[ability];
     if (!key) return;
+    const box = this.#keycap(key);
+    this.tweens.add({ targets: box, alpha: 1, duration: 300 });
+    this.hint = { box, id, key, until: this.time.now + 15000 };
+  }
+
+  /** A small keyboard-key icon (starts invisible). */
+  #keycap(key) {
     const box = this.add.container(0, 0).setDepth(30);
     const label = this.add.text(0, 0, key, { fontFamily: 'system-ui, sans-serif', fontSize: '14px', color: '#111111', fontStyle: 'bold' }).setOrigin(0.5);
     const w = Math.max(24, label.width + 12);
     const cap = this.add.rectangle(0, 0, w, 24, 0xeeeeee, 0.9).setStrokeStyle(2, 0x777777);
     box.add([cap, label]);
-    box.setAlpha(0);
-    this.tweens.add({ targets: box, alpha: 1, duration: 300 });
-    this.hint = { box, id, key, until: this.time.now + 15000 };
+    return box.setAlpha(0);
+  }
+
+  /** [E] above an unpulled lever while the local character is within reach of it. */
+  #updateLeverHints() {
+    const me = this.views.get(this.localControl);
+    for (const lv of this.level.levers) {
+      lv.hint ??= this.#keycap('E').setPosition(lv.data.x, lv.data.y - 62);
+      const near = !!me && !lv.on && Math.abs(me.x - lv.data.x) < 70 && Math.abs(me.y - lv.data.y) < 60;
+      lv.hint.setAlpha(Phaser.Math.Linear(lv.hint.alpha, near ? 1 : 0, 0.15));
+    }
   }
 
   #updateHint(input) {
