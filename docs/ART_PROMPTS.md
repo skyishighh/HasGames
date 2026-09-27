@@ -47,11 +47,11 @@ Read `docs/ART_DIRECTION.md` first. Then generate one reference image. Save it a
 
 **Far — `awakening_far.png`** (transparent background)
 > [shared style] Transparent background. A distant, faded tree line of tall thin pine silhouettes
-> and a few broken stone arches, in light gray (about 60–70% brightness), fading into fog near the
+> and a few broken stone arches, in light gray (about 55–65% brightness, like the far pines in the style frame), fading into fog near the
 > bottom. Low contrast. The shapes fill the lower two thirds and the top is empty.
 
 **Mid — `awakening_mid.png`** (transparent background)
-> [shared style] Transparent background. Closer, darker tree trunks (about 25–35% brightness) with
+> [shared style] Transparent background. Closer, darker tree trunks (about 35–45% brightness, like the mid trees in the style frame) with
 > twisted branches, hanging roots and vines. More detail than the far layer, but still soft.
 > The trunks reach the bottom edge. The top third is mostly empty with a few branches.
 

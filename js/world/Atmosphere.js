@@ -16,9 +16,11 @@ export class Atmosphere {
       this.darkImg = this.#screenLayer(scene.add.image(0, 0, 'darkness'), 20, WIDTH / DARK_W);
     }
 
-    this.fog = this.#screenLayer(scene.add.tileSprite(0, 0, WIDTH, HEIGHT, this.#fogTexture()), 15, 1).setAlpha(0.18);
+    // Fog drifts behind the play area (above backdrops, below terrain), so near-black stays near-black.
+    this.fog = this.#screenLayer(scene.add.tileSprite(0, 0, WIDTH, HEIGHT, this.#fogTexture()), -2, 1).setAlpha(0.18);
     this.#screenLayer(scene.add.image(0, 0, this.#vignetteTexture()), 24, 1);
-    this.grain = this.#screenLayer(scene.add.tileSprite(0, 0, WIDTH, HEIGHT, this.#grainTexture()), 25, 1).setAlpha(0.07);
+    this.grain = this.#screenLayer(scene.add.tileSprite(0, 0, WIDTH, HEIGHT, this.#grainTexture()), 25, 1)
+      .setAlpha(0.12).setBlendMode(Phaser.BlendModes.MULTIPLY);   // multiply: grain never lifts black
   }
 
   #screenLayer(obj, depth, baseScale) {
