@@ -241,7 +241,7 @@ const ANCHOR = {
   wind: [
     { x: 17300, y: 400, w: 1100, h: 300, push: 300, on: 1.4, off: 1.8, startCalm: true },  // 2
     { x: 15000, y: 400, w: 1000, h: 300, push: 300, on: 1.3, off: 1.5 },                   // 4
-    { x: 11300, y: 400, w: 900, h: 300, push: 320, on: 1.2, off: 1.4 },                    // 9
+    { x: 11450, y: 400, w: 750, h: 300, push: 320, on: 1.2, off: 1.4 },                    // 9 · ends before the debris: the slam spot is sheltered
   ],
   plates: [
     { id: 'pa1', x: 13420, y: 912, w: 90, opens: 'bra1', latch: true },  // 7 · hidden under debris
