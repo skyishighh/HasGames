@@ -28,6 +28,15 @@
     <p class="hint">Move A/D · Sprint Shift · Jump W/Space · Crouch S · Interact E · Abilities J / K · (dev) role 1–4 · dummy 0 · switch control Tab</p>
   </section>
 
+  <script>
+    // Always load the newest game files (see sw.js). The very first time the worker takes over,
+    // reload once so this visit also gets fresh files instead of old saved copies.
+    if ('serviceWorker' in navigator) {
+      const hadWorker = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (!hadWorker) location.reload(); });
+    }
+  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
