@@ -27,7 +27,7 @@ export default {
     // Scout — mesh wall leads to this ledge.
     { x: 960, y: 160, w: 120, h: 14 },
     // Scout — vent: a low block; only a crawling Scout fits underneath.
-    { x: 1150, y: 390, w: 200, h: 46 },
+    { x: 1150, y: 390, w: 200, h: 70, vent: true },
 
     // Warden — high ledge reachable only by standing on the pushed block.
     { x: 2050, y: 350, w: 150, h: 110 },

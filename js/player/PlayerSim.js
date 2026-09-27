@@ -119,7 +119,6 @@ export class PlayerSim {
   respawn() {
     this.#dropCarried();
     this.#setPlanted(false);
-    this.body.setSize(this.stats.w, this.stats.h, false).setOffset(0, 0);   // leave any crouch hitbox
     this.body.setAllowGravity(true);
     this.#resetState();
     this.body.reset(this.checkpoint.x, this.checkpoint.y - this.stats.h / 2 - 2);
@@ -162,14 +161,14 @@ export class PlayerSim {
       // Walking into a low opening (a ceiling edge at head height): a Scout that can crawl ducks
       // into it; anyone else is stopped like at a wall. Without this, physics could squeeze the
       // player down through the floor under the edge.
-      if (dir && this.grounded && this.lockT <= 0 && this.#lowCeilingAhead(dir)) {
+      if (dir && this.grounded && this.lockT <= 0 && this.#lowCeilingAhead(dir, ctx.level)) {
         if (this.role === 'scout' && this.has('crawl')) this.#setCrouch(true, ctx.level);
         else { body.setVelocityX(0); this.#applyWind(ctx); this.pressed = {}; return; }
       }
       const speed = this.crouching ? Math.min(this.stats.speed, T.crawlSpeed)
         : this.stats.speed * (this.sprinting ? SPRINT_MULT : 1);
       if (this.lockT <= 0) body.setVelocityX(dir * speed);
-      if (this.jumpBufT > 0 && this.coyoteT > 0 && !inp.down) {
+      if (this.jumpBufT > 0 && this.coyoteT > 0 && !inp.down && this.#canStand(ctx.level)) {   // no jumping inside a vent
         body.setVelocityY(-this.stats.jump);
         this.jumpBufT = 0; this.coyoteT = 0;
       }
@@ -217,7 +216,7 @@ export class PlayerSim {
     // Crawl (S) — only the Scout's hitbox shrinks, so only the Scout fits vents.
     // Stay down while there's no headroom, or while a low opening is right ahead (no flicker at its edge).
     this.#setCrouch(inp.down && this.grounded ||
-      (this.crouching && (!this.#canStand(level) || (dir !== 0 && this.#lowCeilingAhead(dir)))), level);
+      (this.crouching && (!this.#canStand(level) || (dir !== 0 && this.#lowCeilingAhead(dir, level)))), level);
 
     // Wall-jump / wall-slide (with a short grace window after touching the wall)
     const touching = !this.has('walljump') ? 0 : body.blocked.left ? -1 : body.blocked.right ? 1 : 0;
@@ -236,32 +235,32 @@ export class PlayerSim {
     return false;
   }
 
+  /**
+   * Crouching never changes the hitbox (resizing next to solid edges let physics squeeze bodies
+   * through floors). A crouching Scout with 'crawl' instead passes through vent solids — see
+   * GameScene #onPlayerHitsStatic — and looks crouched via the snapshot's `crouch` flag.
+   */
   #setCrouch(on, level) {
     if (on === this.crouching) return;
     if (!on && !this.#canStand(level)) return;
     this.crouching = on;
-    const r = this.stats;
-    // Only a Scout that has earned 'crawl' shrinks enough to fit through vents.
-    const h = on && (this.role !== 'scout' || this.has('crawl')) ? r.crouchH : r.h;
-    this.body.setSize(r.w, h, false);
-    this.body.setOffset(0, r.h - h);
   }
 
-  /** Is there solid geometry just ahead whose bottom edge is between our head and feet? */
-  #lowCeilingAhead(dir) {
+  /** True while this player may crawl through vents (crouching Scout that earned 'crawl'). */
+  canCrawlThrough() { return this.role === 'scout' && this.crouching && this.has('crawl'); }
+
+  /** Is a vent directly ahead (at head height), or a low ceiling edge between our head and feet? */
+  #lowCeilingAhead(dir, level) {
     const b = this.body;
-    const probeX = dir > 0 ? b.right : b.x - 6;
-    const hits = this.scene.physics.overlapRect(probeX, b.y, 6, b.height - 6, false, true);
+    const probe = new Rect(dir > 0 ? b.right : b.x - 6, b.y, 6, b.height - 6);
+    if (level?.vents.some((v) => hit(probe, v))) return true;
+    const hits = this.scene.physics.overlapRect(probe.x, probe.y, probe.width, probe.height, false, true);
     return hits.some((h) => h.bottom > b.y + 1 && h.bottom < b.bottom - 4);
   }
 
+  /** Can't stand up while any part of the body is inside a vent. */
   #canStand(level) {
-    const r = this.stats;
-    const b = this.body;
-    const extra = r.h - b.height;
-    if (extra <= 0) return true;
-    const hits = this.scene.physics.overlapRect(b.x + 1, b.y - extra, r.w - 2, extra, true, true);
-    return hits.every((h) => h === b || h.gameObject?.sim);
+    return !(level?.vents ?? []).some((v) => hit(this.bounds, v));
   }
 
   // ---------------------------------------------------------------- Warden

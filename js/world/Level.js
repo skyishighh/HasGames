@@ -25,9 +25,18 @@ export class Level {
 
     // --- Static geometry ---
     this.solids = withPhysics ? phys.add.staticGroup() : null;
+    this.vents = [];
     for (const r of data.solids) {
       const rect = add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, INK);
       this.solids?.add(rect);
+      if (r.vent) {                                   // crawl-through opening: draw its base as a grate
+        rect.isVent = true;
+        this.vents.push(rectOf(r));
+        const g = add.graphics();
+        g.fillStyle(0x3a3a3a, 1).fillRect(r.x, r.y + r.h - 24, r.w, 24);
+        g.lineStyle(2, 0x111111, 1);
+        for (let x = r.x + 6; x < r.x + r.w; x += 10) g.lineBetween(x, r.y + r.h - 24, x, r.y + r.h);
+      }
     }
 
     this.oneWay = (data.oneWay ?? []).map((r) => {

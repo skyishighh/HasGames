@@ -36,11 +36,11 @@ export default {
     { x: 0, y: 900, w: 880, h: 40 },            // pit floor
     { x: 300, y: 872, w: 30, h: 28 },           // rocks to hop over
     { x: 450, y: 880, w: 40, h: 20 },
-    { x: 560, y: 300, w: 140, h: 576 },         // fallen pipe: only a crawling Scout fits under (gap 24)
+    { x: 560, y: 300, w: 140, h: 600, vent: true }, // fallen pipe: a crawling Scout passes under it
     { x: 790, y: 740, w: 510, h: 200 },         // shaft 1 right wall / ledge (160 high, 90 wide: needs a wall-jump)
     { x: 1260, y: 380, w: 240, h: 360 },        // mesh wall face and top ledge
     { x: 1500, y: 380, w: 120, h: 40 },
-    { x: 1520, y: 120, w: 20, h: 236 },         // shaft 2 (narrow, tall): left wall; crawl in through the 24 px gap below
+    { x: 1520, y: 120, w: 20, h: 260, vent: true }, // shaft 2 (narrow, tall): left wall; crawl through its base
     { x: 1600, y: 120, w: 20, h: 260 },         // shaft 2 right wall
     { x: 1620, y: 120, w: 280, h: 40 },         // top shelf
     { x: 1900, y: 200, w: 200, h: 40 },         // practice gap: shallow trench floor (harmless)
@@ -93,7 +93,7 @@ export default {
   // Warden
   blocks: [{ id: 'b1', x: 480, y: 1480, w: 60, h: 60 }],
   crates: [{ id: 'c1', x: 820, y: 1440 }],
-  buttons: [{ id: 's1', x: 1056, y: 1320, w: 20, h: 44, opens: 'g1' }], // pressed by a thrown crate, stays pressed
+  buttons: [{ id: 's1', x: 1060, y: 1290, w: 40, h: 90, opens: 'g1' }], // switch panel beside the door: hit it with a thrown crate (stays pressed)
   cracked: [{ id: 'w1', x: 1250, y: 1240, w: 30, h: 200 }],
   crushers: [
     { id: 'k1', x: 1400, w: 80, h: 60, top: 1240, floor: 1440, period: 6, safe: true }, // slow & harmless: shoves you back

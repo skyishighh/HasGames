@@ -11,6 +11,7 @@ import { Level } from '../world/Level.js';
 import { Atmosphere } from '../world/Atmosphere.js';
 import { Scripted } from '../world/Scripted.js';
 import { SnapshotBuffer } from '../snapshot-buffer.js';
+import { enableSubstepping } from '../world/physics-substep.js';
 import gym from '../levels/gym.js';
 import awakening from '../levels/awakening.js';
 
@@ -62,6 +63,7 @@ export class GameScene extends Phaser.Scene {
 
     if (isHost) {
       this.physics.world.gravity.y = GRAVITY;
+      enableSubstepping(this.physics.world, this.sys.events);   // slow frames can't sink through floors
       this.physics.world.setBounds(0, 0, this.levelData.width, this.levelData.height + 200);
       this.physics.world.setBoundsCollision(true, true, true, false); // open bottom: pits
       this.playerGroup = this.physics.add.group();
@@ -133,20 +135,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   #onPlayerHitsStatic(pl, obj) {
+    const pb = pl.body, sb = obj.body;
+    const isCrusher = this.level.crushers.some((c) => c.view === obj);   // crushers are meant to press down
+
+    // The Warden's weight breaks fragile floors a moment after stepping on them.
+    const frag = this.level.fragile.find((f) => f.view === obj);
+    if (frag && pl.sim.role === 'warden' && !frag.breakAt && cameFromAbove(pb, sb, 8)) frag.breakAt = this.time.now + 250;
+
+    // Vents (low openings like the fallen pipe): a crouching Scout that has earned 'crawl' passes
+    // through them. The Scout's hitbox never changes size, so crawling can't squeeze it into floors.
+    if (obj.isVent && pl.sim.canCrawlThrough()) return false;
+
     // Walking (or drifting) sideways into a ledge whose underside is at head height: resolve it as a
     // wall bump. Arcade would otherwise push the player DOWN, which can squeeze them through the floor.
-    const pb = pl.body, sb = obj.body;
     const headOverlap = sb.bottom - pb.y;
-    const isCrusher = this.level.crushers.some((c) => c.view === obj);   // crushers are meant to press down
     if (!isCrusher && headOverlap > 0 && headOverlap < pb.height * 0.6 && startY(pb) >= sb.bottom - 1 && pb.velocity.y >= -1) {
       if (pb.center.x < sb.center.x) { pb.x = sb.x - pb.width; pb.blocked.right = true; }
       else { pb.x = sb.right; pb.blocked.left = true; }
       pb.velocity.x = 0;
       return false;
     }
-    const frag = this.level.fragile.find((f) => f.view === obj);
-    // The Warden's weight breaks fragile floors a moment after stepping on them.
-    if (frag && pl.sim.role === 'warden' && !frag.breakAt && cameFromAbove(pl.body, obj.body, 8)) frag.breakAt = this.time.now + 250;
     return true;
   }
 
