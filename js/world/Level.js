@@ -75,11 +75,24 @@ export class Level {
     });
 
     // --- Wind ---
-    this.wind = (data.wind ?? []).map((w) => ({
-      data: w, rect: rectOf(w), active: false,
-      t: w.startCalm ? w.on : 0,             // startCalm: begin in the calm phase
-      streaks: add.graphics().setDepth(5),
-    }));
+    this.wind = (data.wind ?? []).map((w, i) => {
+      // Fixed random look per zone (seeded, so every client draws the same gust).
+      const rng = new Phaser.Math.RandomDataGenerator([`wind-${i}-${w.x}`]);
+      const area = (w.w * w.h) / 6000;
+      return {
+        data: w, rect: rectOf(w), active: false, vis: 0,
+        t: w.startCalm ? w.on : 0,           // startCalm: begin in the calm phase
+        streaks: add.graphics().setDepth(5),
+        lines: Array.from({ length: Math.round(area) }, () => ({
+          off: rng.frac(), y: rng.frac(), len: rng.between(30, 110), speed: rng.realInRange(0.5, 1.1),
+          width: rng.pick([1, 1, 1.5, 2]), alpha: rng.realInRange(0.3, 0.6), wob: rng.realInRange(0, 6.28),
+        })),
+        flecks: Array.from({ length: Math.round(area / 2.5) }, () => ({
+          off: rng.frac(), y: rng.frac(), speed: rng.realInRange(0.45, 0.8), size: rng.realInRange(4, 8),
+          spin: rng.realInRange(4, 10), wob: rng.realInRange(0, 6.28),
+        })),
+      };
+    });
 
     // --- Plates, buttons, gates/bridges, nodes, phantom platforms, hooks ---
     this.plates = (data.plates ?? []).map((p) => ({
@@ -189,6 +202,7 @@ export class Level {
       phantom: this.phantom.map((p) => p.lit),
       crushers: this.crushers.map((c) => Math.round(c.view.y)),
       wind: this.wind.map((w) => w.active),
+      windT: this.wind.map((w) => Math.round(w.t * 10) / 10),   // gust timer, so guests see the warning too
       frags: this.fragments.map((f) => f.taken),
       chain: this.chain && [this.chain.x1, this.chain.y1, this.chain.x2, this.chain.y2].map(Math.round),
     };
@@ -218,6 +232,7 @@ export class Level {
     });
     if (!this.host) s.crushers?.forEach((y, i) => { if (this.crushers[i]) this.crushers[i].view.y = y; });
     s.wind?.forEach((v, i) => { if (this.wind[i]) this.wind[i].active = !!v; });
+    if (!this.host) s.windT?.forEach((t, i) => { if (this.wind[i]) this.wind[i].t = t; });
     s.frags?.forEach((v, i) => this.setFragmentTaken(i, !!v));
     // The host owns the real chain object (with owner/lifetime); guests mirror its endpoints.
     if (!this.host) this.chain = Array.isArray(s.chain) ? { x1: s.chain[0], y1: s.chain[1], x2: s.chain[2], y2: s.chain[3] } : null;
@@ -303,21 +318,40 @@ export class Level {
       f.view.setY(y).setAngle(time / 20);
       f.glow.setY(y).setScale(1 + Math.sin(time / 250) * 0.2);
     }
-    for (const w of this.wind) {
-      const g = w.streaks.clear();
-      if (!w.active) continue;
-      g.lineStyle(1, 0xffffff, 0.25);
-      const r = w.data, dir = Math.sign(r.push);
-      for (let i = 0; i < 14; i++) {
-        const y = r.y + ((i * 37) % r.h);
-        const x = r.x + ((((time * 0.6 * dir) + i * 91) % r.w) + r.w) % r.w;
-        g.lineBetween(x, y, x - 30 * dir, y);
-      }
-    }
+    for (const w of this.wind) this.#drawWind(w, time);
     const c = this.chainGfx.clear();
     if (this.chain) {
       c.lineStyle(3, 0x0a0a0a, 1).lineBetween(this.chain.x1, this.chain.y1, this.chain.x2, this.chain.y2);
       c.lineStyle(1, 0x888888, 0.6).lineBetween(this.chain.x1, this.chain.y1, this.chain.x2, this.chain.y2);
+    }
+  }
+
+  /**
+   * A gust: many streaks of air plus dark flecks (leaves, grit) tumbling through, fading in and out.
+   * Shortly before a gust starts, a few faint streaks stir as a warning (time to plant, or jump now).
+   */
+  #drawWind(w, time) {
+    const r = w.data, cycle = r.on + r.off;
+    const warning = !w.active && cycle - w.t < 0.6;          // the last 0.6 s of the calm
+    const target = w.active ? 1 : warning ? 0.3 : 0;
+    w.vis += (target - w.vis) * 0.12;                         // smooth build-up / fade
+    const g = w.streaks.clear();
+    if (w.vis < 0.02) return;
+    const dir = Math.sign(r.push), secs = time / 1000;
+    const wrapX = (u) => r.x + (((u % 1) + 1) % 1) * r.w;
+    for (const l of w.lines) {
+      const x = wrapX(l.off + secs * l.speed * dir * 900 / r.w);
+      const y = r.y + l.y * r.h + Math.sin(secs * 3 + l.wob) * 6;
+      g.lineStyle(l.width, 0xffffff, l.alpha * w.vis);
+      g.lineBetween(x, y, x - l.len * dir, y + Math.sin(secs * 3 + l.wob + 1) * 3);
+    }
+    if (w.vis < 0.5) return;                                  // flecks only in a real gust
+    g.fillStyle(0x0a0a0a, 0.85 * w.vis);
+    for (const f of w.flecks) {
+      const x = wrapX(f.off + secs * f.speed * dir * 900 / r.w);
+      const y = r.y + f.y * r.h + Math.sin(secs * 4 + f.wob) * 18;
+      const a = secs * f.spin + f.wob, c = Math.cos(a) * f.size, s2 = Math.sin(a) * f.size * 0.4;
+      g.fillTriangle(x - c, y - s2, x + c, y + s2, x + s2, y - c * 0.5);
     }
   }
 
