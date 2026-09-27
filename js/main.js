@@ -62,6 +62,7 @@ async function startHost() {
       else if (msg?.t === 'role' && typeof msg.role === 'string') run((s) => s.setRole(id, msg.role)); // dev: role switch
       else if (msg?.t === 'dev' && msg.action === 'spawn') run((s) => s.devSpawn(id));                 // dev: dummy
       else if (msg?.t === 'dev' && msg.action === 'cycle') run((s) => net.send(id, { t: 'control', id: s.devCycle(id) }));
+      else if (msg?.t === 'dev' && msg.action === 'unlockAll') run((s) => s.devUnlockAll(id));
     },
   });
   const code = await net.start();

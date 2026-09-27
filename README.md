@@ -20,6 +20,7 @@ Developer only (test build):
 - **1–4** switch the controlled character's role (Scout, Warden, Weaver, Anchor)
 - **0** spawns a dummy teammate next to you (up to 3)
 - **Tab** switches which character you control (yours or a dummy), so two-player abilities can be tested alone
+- **9** unlocks every ability of the controlled character's role (abilities are normally earned from Code Fragments)
 
 ## Structure
 - `js/main.js`                  – lobby UI, networking setup, boots Phaser

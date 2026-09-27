@@ -1,6 +1,6 @@
 // Host-side simulation of one player: movement + role abilities.
 // Guests never run this; they receive the snapshot() output and draw it.
-import { ROLES, EMPTY_INPUT, EDGE_KEYS, SPRINT_MULT } from '../roles.js';
+import { ROLES, EMPTY_INPUT, EDGE_KEYS, SPRINT_MULT, ABILITIES } from '../roles.js';
 
 const Rect = Phaser.Geom.Rectangle;
 const hit = Phaser.Geom.Intersects.RectangleToRectangle;
@@ -13,7 +13,7 @@ const T = {
   liftRange: 40, throwCrateX: 420, throwCrateY: 600, smashRange: 40,
   throwMateRange: 60, throwMateX: 260, throwMateY: 820,
   beamLength: 360, energyDrain: 30, energyRegen: 22, regenDelay: 0.5, flareCost: 40, flareRadius: 180,
-  beamWalk: 0.6, phantomLinger: 1.2, nodeTolerance: 18, burnoutRecover: 30,
+  beamWalk: 0.6, phantomLinger: 1.2, nodeTolerance: 28, burnoutRecover: 30,
   slamSpeed: 700, maxFall: 900, chainRange: 320, chainLife: 10, yankRange: 280, yankSpeed: 700,
   rideSpeed: 420, dropTime: 0.25,
   jumpBuffer: 0.12, coyote: 0.08, wallGrace: 0.1,
@@ -38,6 +38,7 @@ export class PlayerSim {
     this.input = { ...EMPTY_INPUT };
     this.pressed = {};           // edge flags, consumed once per step
     this.checkpoint = { x, y: feetY };
+    this.abilities = new Set();  // unlocked role abilities (see roles.js ABILITIES)
     this.#resetState();
     this.#createHitbox(role, x, feetY);
   }
@@ -89,7 +90,19 @@ export class PlayerSim {
     const x = this.x, feet = this.feet;
     this.#resetState();
     this.#createHitbox(role, x, feet);
+    this.abilities.clear();      // a new role starts without abilities
   }
+
+  has(ability) { return this.abilities.has(ability); }
+
+  /** Unlocks an ability of this player's role. Returns true if it was new. */
+  unlock(ability) {
+    if (!(ability in ABILITIES[this.role]) || this.abilities.has(ability)) return false;
+    this.abilities.add(ability);
+    return true;
+  }
+
+  unlockAll() { for (const a of Object.keys(ABILITIES[this.role])) this.abilities.add(a); }
 
   setInput(input) {
     if (typeof input !== 'object' || input === null) return;
@@ -146,6 +159,13 @@ export class PlayerSim {
     const consumed = ability.call(this, ctx, dir);   // role may take over movement this frame
 
     if (!consumed) {
+      // Walking into a low opening (a ceiling edge at head height): a Scout that can crawl ducks
+      // into it; anyone else is stopped like at a wall. Without this, physics could squeeze the
+      // player down through the floor under the edge.
+      if (dir && this.grounded && this.lockT <= 0 && this.#lowCeilingAhead(dir)) {
+        if (this.role === 'scout' && this.has('crawl')) this.#setCrouch(true, ctx.level);
+        else { body.setVelocityX(0); this.#applyWind(ctx); this.pressed = {}; return; }
+      }
       const speed = this.crouching ? Math.min(this.stats.speed, T.crawlSpeed)
         : this.stats.speed * (this.sprinting ? SPRINT_MULT : 1);
       if (this.lockT <= 0) body.setVelocityX(dir * speed);
@@ -171,7 +191,7 @@ export class PlayerSim {
       if (this.dashT <= 0) body.setAllowGravity(true);
       return true;
     }
-    if (pr.a1 && this.dashCd <= 0 && (this.grounded || this.airDash)) {
+    if (pr.a1 && this.has('dash') && this.dashCd <= 0 && (this.grounded || this.airDash)) {
       if (!this.grounded) this.airDash = false;
       this.dashT = T.dashTime; this.dashCd = T.dashCooldown;
       this.#setCrouch(false, level);
@@ -181,7 +201,7 @@ export class PlayerSim {
     }
 
     // Mesh climbing (hold W on mesh)
-    const onMesh = level.mesh.some((m) => hit(this.bounds, m.rect));
+    const onMesh = this.has('climb') && level.mesh.some((m) => hit(this.bounds, m.rect));
     if (onMesh && inp.up && !this.climbing) this.climbing = true;
     if (this.climbing && (!onMesh || (pr.jump && dir))) {
       this.climbing = false;
@@ -195,10 +215,12 @@ export class PlayerSim {
     }
 
     // Crawl (S) — only the Scout's hitbox shrinks, so only the Scout fits vents.
-    this.#setCrouch(inp.down && this.grounded || (this.crouching && !this.#canStand(level)), level);
+    // Stay down while there's no headroom, or while a low opening is right ahead (no flicker at its edge).
+    this.#setCrouch(inp.down && this.grounded ||
+      (this.crouching && (!this.#canStand(level) || (dir !== 0 && this.#lowCeilingAhead(dir)))), level);
 
     // Wall-jump / wall-slide (with a short grace window after touching the wall)
-    const touching = body.blocked.left ? -1 : body.blocked.right ? 1 : 0;
+    const touching = !this.has('walljump') ? 0 : body.blocked.left ? -1 : body.blocked.right ? 1 : 0;
     if (!this.grounded && touching) { this.wallDir = touching; this.wallT = T.wallGrace; }
     if (this.grounded) this.wallT = 0;
     if (this.wallT > 0) {
@@ -219,9 +241,18 @@ export class PlayerSim {
     if (!on && !this.#canStand(level)) return;
     this.crouching = on;
     const r = this.stats;
-    const h = on ? r.crouchH : r.h;
+    // Only a Scout that has earned 'crawl' shrinks enough to fit through vents.
+    const h = on && (this.role !== 'scout' || this.has('crawl')) ? r.crouchH : r.h;
     this.body.setSize(r.w, h, false);
     this.body.setOffset(0, r.h - h);
+  }
+
+  /** Is there solid geometry just ahead whose bottom edge is between our head and feet? */
+  #lowCeilingAhead(dir) {
+    const b = this.body;
+    const probeX = dir > 0 ? b.right : b.x - 6;
+    const hits = this.scene.physics.overlapRect(probeX, b.y, 6, b.height - 6, false, true);
+    return hits.some((h) => h.bottom > b.y + 1 && h.bottom < b.bottom - 4);
   }
 
   #canStand(level) {
@@ -254,7 +285,7 @@ export class PlayerSim {
     }
 
     if (pr.a1) {
-      const crate = !this.sprinting && level.crates.find((k) => !k.carriedBy &&
+      const crate = !this.sprinting && this.has('lift') && level.crates.find((k) => !k.carriedBy &&
         Phaser.Math.Distance.Between(k.view.x, k.view.y, this.x, body.center.y) < T.liftRange);
       if (crate) {                                   // J near crate: lift
         this.carrying = crate;
@@ -262,7 +293,7 @@ export class PlayerSim {
         crate.view.body.enable = false;
         return false;
       }
-      if (this.sprinting) {                          // Shift + J (sprinting): smash
+      if (this.sprinting && this.has('smash')) {     // Shift + J (sprinting): smash
         const front = new Rect(this.facing > 0 ? body.right : body.x - T.smashRange, body.y, T.smashRange, body.height);
         const wall = level.cracked.find((w) => !w.broken && hit(front, w.view.getBounds()));
         if (wall) { level.breakObject(wall); ctx.fx('smash', wall.view.x, wall.view.y); }
@@ -270,14 +301,14 @@ export class PlayerSim {
     }
 
     // Hold J under (or stepping under) a crusher: brace it.
-    if (inp.a1) {
+    if (inp.a1 && this.has('brace')) {
       const crusher = level.crushers.find((k) => body.y >= k.data.top && this.feet <= k.floor + 2 &&
         body.right > k.data.x - 4 && body.x < k.data.x + k.data.w + 4);
       if (crusher) this.bracing = true;
     }
 
     // K next to a teammate: throw them.
-    if (pr.a2) {
+    if (pr.a2 && this.has('throwMate')) {
       const mate = this.#nearestMate(ctx.players, T.throwMateRange);
       if (mate) {
         mate.lockT = 0.25;
@@ -305,7 +336,7 @@ export class PlayerSim {
     this.sinceBeam += dt;
 
     // K: flare (all directions)
-    if (pr.a2 && this.energy >= T.flareCost) {
+    if (pr.a2 && this.has('flare') && this.energy >= T.flareCost) {
       this.energy -= T.flareCost;
       this.sinceBeam = 0;
       this.flareT = 0.6;
@@ -318,7 +349,7 @@ export class PlayerSim {
     if (this.burnout && this.energy >= T.burnoutRecover) this.burnout = false;
 
     // Hold J: beam aimed with the arrow keys (default: straight ahead) while walking slowly with A/D.
-    if (inp.a1 && !this.burnout) {
+    if (inp.a1 && this.has('beam') && !this.burnout) {
       let ax = (inp.aimR ? 1 : 0) - (inp.aimL ? 1 : 0);
       const ay = (inp.aimD ? 1 : 0) - (inp.aimU ? 1 : 0);
       if (!ax && !ay) ax = this.facing;
@@ -375,9 +406,9 @@ export class PlayerSim {
     const body = this.body, pr = this.pressed;
 
     if (pr.a1) {
-      if (this.planted) this.#setPlanted(false);                      // J: release
-      else if (this.grounded) this.#setPlanted(true);                 // J on ground: plant
-      else { this.slamming = true; body.setVelocity(0, T.slamSpeed); } // J in air: slam
+      if (this.planted) this.#setPlanted(false);                                        // J: release
+      else if (this.grounded) { if (this.has('plant')) this.#setPlanted(true); }        // J on ground: plant
+      else if (this.has('slam')) { this.slamming = true; body.setVelocity(0, T.slamSpeed); } // J in air: slam
     }
 
     if (pr.a2) {
@@ -385,10 +416,10 @@ export class PlayerSim {
         Phaser.Math.Distance.Between(h.data.x, h.data.y, this.x, body.y + 8) < T.chainRange);
       if (level.chain && level.chain.owner === this.id) {
         level.chain = null;                                           // K again: retract
-      } else if (hook) {
+      } else if (hook && this.has('chain')) {
         level.chain = { x1: this.x, y1: body.y + 8, x2: hook.data.x, y2: hook.data.y, owner: this.id, until: time + T.chainLife };
       } else {
-        const mate = this.#nearestMate(ctx.players, T.yankRange);     // K at teammate: yank
+        const mate = this.has('yank') && this.#nearestMate(ctx.players, T.yankRange); // K at teammate: yank
         if (mate) {
           const a = Phaser.Math.Angle.Between(mate.x, mate.body.center.y, this.x, body.center.y);
           mate.lockT = 0.3;
@@ -471,6 +502,7 @@ export class PlayerSim {
       crouch: this.crouching, climb: this.climbing, planted: this.planted, brace: this.bracing,
       carry: !!this.carrying, energy: Math.round(this.energy), dash: this.dashT > 0, ride: !!this.ride,
       sprint: this.sprinting,
+      ab: [...this.abilities],
       beam: this.beam && [this.beam.x1, this.beam.y1, this.beam.x2, this.beam.y2].map(Math.round),
       flare: this.flareT > 0,
     };

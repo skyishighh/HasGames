@@ -140,6 +140,22 @@ export default {
     { x: 3790, y: 1540, type: 'dark', radius: 60 },                 // Weaver: revealed by the flare
   ],
 
+  // Code Fragments: each unlocks one ability, placed right before its first use.
+  fragments: [
+    { role: 'scout', ability: 'crawl', x: 528, y: 900 },
+    { role: 'scout', ability: 'walljump', x: 745, y: 900 },
+    { role: 'scout', ability: 'climb', x: 1170, y: 740 },
+    { role: 'scout', ability: 'dash', x: 1850, y: 120 },
+    { role: 'warden', ability: 'push', x: 420, y: 1540 },
+    { role: 'warden', ability: 'lift', x: 760, y: 1440 },
+    { role: 'warden', ability: 'smash', x: 1190, y: 1440 },
+    { role: 'warden', ability: 'brace', x: 1360, y: 1440 },
+    { role: 'anchor', ability: 'plant', x: 5715, y: 700 },
+    { role: 'anchor', ability: 'slam', x: 4020, y: 700 },
+    { role: 'weaver', ability: 'beam', x: 5790, y: 1540 },
+    { role: 'weaver', ability: 'flare', x: 3975, y: 1540 },
+  ],
+
   // Client-side scripted moments.
   triggers: [
     { x: 2480, y: 0, w: 160, h: 120, action: 'reveal' },

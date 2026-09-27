@@ -6,6 +6,7 @@ const G = 460;
 
 export default {
   name: 'Ability Gym',
+  allAbilities: true,                       // developer test room: every ability unlocked
   width: 4800,
   height: 540,
   spawn: { x: 100, spacing: 40 },

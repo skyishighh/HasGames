@@ -3,7 +3,7 @@
 //           and the level rules, then broadcasts snapshots
 //  - guest: has no physics; sends input and draws interpolated snapshots
 import { WIDTH, HEIGHT, GRAVITY, SNAPSHOT_HZ } from '../config.js';
-import { ROLE_ORDER, EMPTY_INPUT } from '../roles.js';
+import { ROLE_ORDER, EMPTY_INPUT, ABILITIES } from '../roles.js';
 import { PlayerView } from '../objects/PlayerView.js';
 import { PlayerSim } from '../player/PlayerSim.js';
 import { LocalInput } from '../player/input.js';
@@ -105,7 +105,7 @@ export class GameScene extends Phaser.Scene {
         const [pl, blk] = split(a, c);
         const side = !cameFromAbove(pl.body, blk.body);
         const into = Math.sign(pl.body.velocity.x) === Math.sign(blk.body.center.x - pl.body.center.x);
-        if (pl.sim.role === 'warden' && side && into) {
+        if (pl.sim.role === 'warden' && pl.sim.has('push') && side && into) {
           blk.body.setVelocityX(pl.body.velocity.x * 0.9);
           blk.pushedUntil = this.time.now + 100;       // no ground friction while being pushed
         }
@@ -133,9 +133,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   #onPlayerHitsStatic(pl, obj) {
+    // Walking (or drifting) sideways into a ledge whose underside is at head height: resolve it as a
+    // wall bump. Arcade would otherwise push the player DOWN, which can squeeze them through the floor.
+    const pb = pl.body, sb = obj.body;
+    const headOverlap = sb.bottom - pb.y;
+    const isCrusher = this.level.crushers.some((c) => c.view === obj);   // crushers are meant to press down
+    if (!isCrusher && headOverlap > 0 && headOverlap < pb.height * 0.6 && startY(pb) >= sb.bottom - 1 && pb.velocity.y >= -1) {
+      if (pb.center.x < sb.center.x) { pb.x = sb.x - pb.width; pb.blocked.right = true; }
+      else { pb.x = sb.right; pb.blocked.left = true; }
+      pb.velocity.x = 0;
+      return false;
+    }
     const frag = this.level.fragile.find((f) => f.view === obj);
     // The Warden's weight breaks fragile floors a moment after stepping on them.
-    if (frag && pl.sim.role === 'warden' && !frag.breakAt && pl.body.bottom <= obj.body.top + 6) frag.breakAt = this.time.now + 250;
+    if (frag && pl.sim.role === 'warden' && !frag.breakAt && cameFromAbove(pl.body, obj.body, 8)) frag.breakAt = this.time.now + 250;
     return true;
   }
 
@@ -167,6 +178,7 @@ export class GameScene extends Phaser.Scene {
     const at = near ? { x: near.x + 30, y: near.feet } : this.#spawnPoint(role, i);
     const sim = new PlayerSim(this, this.playerGroup, id, name, role, at.x, at.y - 2);
     if (near) sim.checkpoint = { ...near.checkpoint };
+    if (this.levelData.allAbilities) sim.unlockAll();    // test levels (Ability Gym)
     this.sims.set(id, sim);
   }
 
@@ -194,6 +206,7 @@ export class GameScene extends Phaser.Scene {
     const sim = this.sims.get(this.#controlled(ownerId));
     if (!sim || sim.role === role) return;
     sim.setRole(role);
+    if (this.levelData.allAbilities) sim.unlockAll();
     // In zone-based levels, switching role also moves you to that role's zone (developer testing).
     const s = this.levelData.spawns?.[role];
     if (s) {
@@ -214,6 +227,9 @@ export class GameScene extends Phaser.Scene {
     while (this.sims.has(`${ownerId}#dummy${n}`)) n++;
     this.addPlayer(`${ownerId}#dummy${n}`, `Dummy ${n}`, this.sims.get(this.#controlled(ownerId)));
   }
+
+  /** Key 9 (developer): unlock every ability of the controlled character's role. */
+  devUnlockAll(ownerId) { this.sims.get(this.#controlled(ownerId))?.unlockAll(); }
 
   /** Tab: move control to the owner's next character. Returns the newly controlled id. */
   devCycle(ownerId) {
@@ -254,12 +270,14 @@ export class GameScene extends Phaser.Scene {
       if (dev?.role !== undefined) this.setRole(this.myId, ROLE_ORDER[dev.role]);
       if (dev?.spawn) this.devSpawn(this.myId);
       if (dev?.cycle) this.setLocalControl(this.devCycle(this.myId));
+      if (dev?.unlockAll) this.devUnlockAll(this.myId);
       this.setInput(this.myId, input);
       this.#stepHost(time / 1000, deltaMs / 1000);
     } else {
       if (dev?.role !== undefined) this.net.send({ t: 'role', role: ROLE_ORDER[dev.role] });
       if (dev?.spawn) this.net.send({ t: 'dev', action: 'spawn' });
       if (dev?.cycle) this.net.send({ t: 'dev', action: 'cycle' });
+      if (dev?.unlockAll) this.net.send({ t: 'dev', action: 'unlockAll' });
       const key = JSON.stringify(input);
       if (key !== this.lastSentInput) { this.net.send({ t: 'input', input }); this.lastSentInput = key; }
       const frame = this.buffer.sampleAll();
@@ -268,6 +286,7 @@ export class GameScene extends Phaser.Scene {
     this.level.draw(time);
     this.#drawBeams();
     this.#updateMood(time, deltaMs / 1000);
+    this.#updateHint(input);
   }
 
   /** Lighting, fog/grain and scripted moments (all clients). */
@@ -279,7 +298,7 @@ export class GameScene extends Phaser.Scene {
       const s = v.lastState;
       if (!s) continue;
       lights.push({ x: s.x, y: s.y - 20, r: 55, a: 0.35 });                        // everyone is faintly visible
-      if (s.role === 'weaver') lights.push({ x: s.x, y: s.y - 22, r: 30 + 60 * (s.energy ?? 100) / 100, a: 0.85 });
+      if (s.role === 'weaver' && s.ab?.includes('beam')) lights.push({ x: s.x, y: s.y - 22, r: 30 + 60 * (s.energy ?? 100) / 100, a: 0.85 });
       if (Array.isArray(s.beam)) {
         const [x1, y1, x2, y2] = s.beam;
         beams.push({ x1, y1, x2, y2 });
@@ -295,8 +314,8 @@ export class GameScene extends Phaser.Scene {
 
   #stepHost(now, dt) {
     const players = [...this.sims.values()];
-    const fx = (type, x, y) => {
-      const f = { type, x: Math.round(x), y: Math.round(y) };
+    const fx = (type, x, y, extra = {}) => {
+      const f = { type, x: Math.round(x), y: Math.round(y), ...extra };
       this.pendingFx.push(f);
       this.#playFx(f);
       if (type === 'slam') this.#slamAt(x, y);
@@ -305,6 +324,17 @@ export class GameScene extends Phaser.Scene {
 
     for (const p of players) p.step(ctx);
     this.#stepWorld(ctx);
+
+    // Code Fragments: the matching role touching one earns its ability.
+    this.level.fragments.forEach((f, i) => {
+      if (f.taken) return;
+      // Tall pickup column, so a fragment is collected whether you walk or jump through it.
+      const zone = new Phaser.Geom.Rectangle(f.data.x - 18, f.data.y - 110, 36, 110);
+      const p = players.find((q) => q.role === f.data.role && hit(q.bounds, zone));
+      if (!p) return;
+      this.level.setFragmentTaken(i, true);
+      if (p.unlock(f.data.ability)) fx('unlock', p.x, p.feet, { id: p.id, a: f.data.ability });
+    });
 
     for (const p of players) {
       if (p.ride) continue;
@@ -438,11 +468,53 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  #playFx({ type, x, y }) {
+  #playFx({ type, x, y, id, a }) {
+    if (type === 'unlock') return this.#playUnlock(x, y, id, a);
     const ring = this.add.circle(x, y, 6).setStrokeStyle(2, 0xffffff, 0.8).setDepth(7);
     const size = { slam: 90, smash: 50, flare: 60, throw: 30, yank: 30 }[type] ?? 30;
     this.tweens.add({ targets: ring, radius: size, alpha: 0, duration: 350, onComplete: () => ring.destroy() });
     if (type === 'slam' || type === 'smash') this.cameras.main.shake(120, 0.004);
+  }
+
+  /** Earning an ability: light pulse + glitch; the local player also gets a key hint icon. */
+  #playUnlock(x, y, id, ability) {
+    for (let i = 0; i < 3; i++) {
+      const ring = this.add.circle(x, y - 24, 8).setStrokeStyle(2, 0xffffff, 0.9).setDepth(7);
+      this.tweens.add({ targets: ring, radius: 70 + i * 30, alpha: 0, duration: 600, delay: i * 120, onComplete: () => ring.destroy() });
+    }
+    const view = this.views.get(id);
+    if (view) this.tweens.add({ targets: view.gfx, alpha: 0.2, duration: 60, yoyo: true, repeat: 4 });
+    if (id === this.localControl) this.#showHint(id, ability);
+  }
+
+  /** Keycap icon above the local character until the new ability's key is pressed (or 15 s pass). */
+  #showHint(id, ability) {
+    this.hint?.box.destroy();
+    const role = Object.keys(ABILITIES).find((r) => ability in ABILITIES[r]);
+    const key = ABILITIES[role]?.[ability];
+    if (!key) return;
+    const box = this.add.container(0, 0).setDepth(30);
+    const label = this.add.text(0, 0, key, { fontFamily: 'system-ui, sans-serif', fontSize: '14px', color: '#111111', fontStyle: 'bold' }).setOrigin(0.5);
+    const w = Math.max(24, label.width + 12);
+    const cap = this.add.rectangle(0, 0, w, 24, 0xeeeeee, 0.9).setStrokeStyle(2, 0x777777);
+    box.add([cap, label]);
+    box.setAlpha(0);
+    this.tweens.add({ targets: box, alpha: 1, duration: 300 });
+    this.hint = { box, id, key, until: this.time.now + 15000 };
+  }
+
+  #updateHint(input) {
+    const h = this.hint;
+    if (!h) return;
+    const view = this.views.get(h.id);
+    if (view) h.box.setPosition(view.x, view.y - 78);
+    const crawled = h.key === 'S' && !!view?.lastState?.crouch;     // the Scout may duck automatically
+    const used = crawled || { J: input.a1, K: input.a2, S: input.down, W: input.up || input.jump,
+      'Shift+J': input.sprint && input.a1, '→': input.left || input.right }[h.key];
+    if (used || this.time.now > h.until || h.id !== this.localControl) {
+      this.hint = null;
+      this.tweens.add({ targets: h.box, alpha: 0, duration: 400, delay: used ? 600 : 0, onComplete: () => h.box.destroy() });
+    }
   }
 
   #removeView(id) {

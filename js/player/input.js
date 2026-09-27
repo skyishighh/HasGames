@@ -2,7 +2,7 @@
 export class LocalInput {
   constructor(scene) {
     this.keys = scene.input.keyboard.addKeys(
-      'A,D,W,S,E,J,K,SPACE,SHIFT,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR,ZERO,TAB');
+      'A,D,W,S,E,J,K,SPACE,SHIFT,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR,ZERO,TAB,NINE');
   }
 
   read() {
@@ -27,6 +27,7 @@ export class LocalInput {
    *  1–4 → { role: index }   switch the controlled character's role
    *  0   → { spawn: true }   spawn a dummy teammate
    *  Tab → { cycle: true }   switch control between your character and your dummies
+   *  9   → { unlockAll: true } give the controlled character every ability of its role
    */
   devAction() {
     const k = this.keys;
@@ -35,6 +36,7 @@ export class LocalInput {
     for (let i = 0; i < roleKeys.length; i++) if (J(roleKeys[i])) return { role: i };
     if (J(k.ZERO)) return { spawn: true };
     if (J(k.TAB)) return { cycle: true };
+    if (J(k.NINE)) return { unlockAll: true };
     return null;
   }
 }

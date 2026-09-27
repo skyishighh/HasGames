@@ -55,7 +55,7 @@ export class PlayerView {
     g.fillStyle(0xffffff, 1).fillRect(s.x + f * headR * 0.4 - 1.5, top + headR * 0.7, 3, 3);
 
     // Weaver: glowing hands show light energy (no HUD text).
-    if (s.role === 'weaver') {
+    if (s.role === 'weaver' && (!s.ab || s.ab.includes('beam'))) {
       const a = 0.15 + 0.85 * ((s.energy ?? 100) / 100);
       g.fillStyle(0xffffff, a).fillCircle(s.x + f * (w / 2 + 2), top + h * 0.55, 3.5);
     }

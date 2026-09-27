@@ -88,6 +88,13 @@ export class Level {
     });
     this.hooks = (data.hooks ?? []).map((h) => ({ data: h, view: add.circle(h.x, h.y, 5, 0x111111).setStrokeStyle(2, 0x777777) }));
 
+    // Code Fragments: touching one unlocks an ability for the matching role.
+    this.fragments = (data.fragments ?? []).map((f) => ({
+      data: f, taken: false,
+      view: add.star(f.x, f.y - 26, 4, 4, 10, 0xffffff).setDepth(4),
+      glow: add.circle(f.x, f.y - 26, 16, 0xffffff, 0.15).setDepth(4),
+    }));
+
     this.chainGfx = add.graphics().setDepth(4);
     this.chain = null; // { x1, y1, x2, y2 }
   }
@@ -138,6 +145,7 @@ export class Level {
   /** Light sources the level itself provides (all clients): glowing nodes and lit phantom platforms. */
   lights() {
     const out = [];
+    for (const f of this.fragments) if (!f.taken) out.push({ x: f.data.x, y: f.data.y - 26, r: 45, a: 0.8 });
     for (const n of this.nodes) out.push({ x: n.data.x, y: n.data.y, r: n.lit || n.latched ? 70 : 22, a: n.lit || n.latched ? 0.9 : 0.5 });
     for (const p of this.phantom) {
       out.push({ x: p.data.x + p.data.w / 2, y: p.data.y, r: p.lit ? 60 : 18, a: p.lit ? 0.8 : 0.35 });
@@ -159,6 +167,7 @@ export class Level {
       phantom: this.phantom.map((p) => p.lit),
       crushers: this.crushers.map((c) => Math.round(c.view.y)),
       wind: this.wind.map((w) => w.active),
+      frags: this.fragments.map((f) => f.taken),
       chain: this.chain && [this.chain.x1, this.chain.y1, this.chain.x2, this.chain.y2].map(Math.round),
     };
   }
@@ -186,6 +195,7 @@ export class Level {
     });
     if (!this.host) s.crushers?.forEach((y, i) => { if (this.crushers[i]) this.crushers[i].view.y = y; });
     s.wind?.forEach((v, i) => { if (this.wind[i]) this.wind[i].active = !!v; });
+    s.frags?.forEach((v, i) => this.setFragmentTaken(i, !!v));
     // The host owns the real chain object (with owner/lifetime); guests mirror its endpoints.
     if (!this.host) this.chain = Array.isArray(s.chain) ? { x1: s.chain[0], y1: s.chain[1], x2: s.chain[2], y2: s.chain[3] } : null;
   }
@@ -209,6 +219,14 @@ export class Level {
   }
 
   breakObject(b) { this.#breakVisual(b); }
+
+  setFragmentTaken(i, taken) {
+    const f = this.fragments[i];
+    if (!f || f.taken === taken) return;
+    f.taken = taken;
+    f.view.setVisible(!taken);
+    f.glow.setVisible(!taken);
+  }
 
   #setPlateVisual(i, pressed) {
     const p = this.plates[i];
@@ -237,6 +255,12 @@ export class Level {
 
   /** Per-frame cosmetic updates (all clients). */
   draw(time) {
+    for (const f of this.fragments) {        // slow float + pulse
+      if (f.taken) continue;
+      const y = f.data.y - 26 + Math.sin(time / 400 + f.data.x) * 4;
+      f.view.setY(y).setAngle(time / 20);
+      f.glow.setY(y).setScale(1 + Math.sin(time / 250) * 0.2);
+    }
     for (const w of this.wind) {
       const g = w.streaks.clear();
       if (!w.active) continue;

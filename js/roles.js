@@ -7,6 +7,18 @@ export const ROLES = {
   anchor: { speed: 190, jump: 540, w: 22, h: 42, crouchH: 42, color: 0x050505 },
 };
 export const ROLE_ORDER = ['scout', 'warden', 'weaver', 'anchor'];
+
+/**
+ * Abilities each role can earn (Code Fragments in the level unlock them one by one).
+ * Basic movement — move, sprint, jump, crouch, interact — is always available.
+ * `key` is the control hint icon shown after unlocking.
+ */
+export const ABILITIES = {
+  scout:  { crawl: 'S', walljump: 'W', climb: 'W', dash: 'J' },
+  warden: { push: '→', lift: 'J', smash: 'Shift+J', brace: 'J', throwMate: 'K' },
+  weaver: { beam: 'J', flare: 'K' },
+  anchor: { plant: 'J', slam: 'J', chain: 'K', yank: 'K' },
+};
 /** Holding Shift multiplies a role's jog speed by this. */
 export const SPRINT_MULT = 1.45;
 

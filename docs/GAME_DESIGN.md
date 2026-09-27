@@ -103,6 +103,9 @@ Tech note: the chain starts as a **straight max-length constraint** (no rope sim
 - Terminal fall speed (900 px/s) and minimum 16 px thickness for thin/breakable floors prevent falling through them.
 - A player holding onto a planted Anchor (within ~40 px) is sheltered from wind.
 
+### Earning abilities (Code Fragments)
+Players start with basic movement only (move, sprint, jump, crouch, interact). Each role ability is earned by touching a glowing **Code Fragment** placed right before its first use; only the matching role's fragments appear in its zone. After earning one, a small keycap icon (e.g. **[J]**) appears above the character until the key is used — the only on-screen hint. Awakening unlocks: Scout crawl → wall-jump → climb → dash; Warden push → lift → smash → brace; Anchor plant → slam; Weaver beam → flare. Warden throw-teammate and Anchor chain/yank are earned in Act III, when teammates are present. The Ability Gym starts with everything unlocked; developer key **9** unlocks all abilities of the controlled role.
+
 ### Solo Awakening (implemented: `js/levels/awakening.js`, the default level)
 Four separated zones around a central chasm; each role spawns in its own zone and ends on a viewing platform where the camera pulls back to reveal the other three. Scout: rocks, crawl under a pipe, wall-jump shafts (90 px and 60 px wide, second entered by crawling), mesh, practice gap, sprint+dash gap. Warden: push block, throw crate onto a switch, smash, a harmless slow crusher then a real one (brace), cracked floor drop. Anchor: wind gusts (plant), latching heavy plate lowers a drawbridge, slam breaks debris into a tunnel. Weaver: darkness, beam reveals the path, node opens a latched door, phantom bridges with a light-energy lesson, flare scare. One Hollow glimpse per zone. Open the Ability Gym with `?level=gym`.
 
