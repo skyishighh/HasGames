@@ -7,6 +7,7 @@
 // skipped, so the game runs before any art exists.
 //
 //   backdrops: {
+//     enabled: true,     // false switches all painted layers (and the foreground) off
 //     default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
 //     zones: {
 //       pit: { rect: { x: 0, y: 0, w: 2500, h: 1000 }, sky: 'pit_sky.png', far: 'pit_far.png', mid: 'pit_mid.png' },
@@ -43,7 +44,7 @@ const texKey = (file) => `bd_${file}`;
 /** Queue every backdrop image for loading. Call from the scene's preload(). */
 export function preloadBackdrops(scene, level) {
   const bd = level.backdrops;
-  if (!bd) return;
+  if (!bd || bd.enabled === false) return;
   const files = new Set();
   for (const set of [bd.default, ...Object.values(bd.zones ?? {})]) {
     for (const { slot } of LAYERS) if (set?.[slot]) files.add(set[slot]);
@@ -59,7 +60,7 @@ export class Backdrops {
     this.sets = [];            // { rect, objs: [] }
     const sources = new Set();
     const bd = level.backdrops;
-    if (!bd) return;
+    if (!bd || bd.enabled === false) return;           // switched off in the level: plain sky gradient only
     const zones = Object.values(bd.zones ?? {});
     // No zones: the default set covers the whole level. With zones: each zone gets its own set.
     const specs = zones.length ? zones : [{ rect: { x: 0, y: 0, w: level.width, h: level.height } }];

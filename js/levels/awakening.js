@@ -15,6 +15,7 @@ export default {
   // Painted backgrounds in assets/bg/ (see docs/ART_PROMPTS.md). Each zone has its own set and they
   // cross-fade at the borders; a missing zone image falls back to the default one.
   backdrops: {
+    enabled: false,     // OFF for now: art direction to be re-discussed (images kept in assets/bg/)
     foreground: true,   // blurred black silhouettes made from each zone's mid image, in front of play
     default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
     zones: {
