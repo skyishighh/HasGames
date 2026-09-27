@@ -109,6 +109,12 @@ Players start with basic movement only (move, sprint, jump, crouch, interact). E
 ### Solo Awakening (implemented: `js/levels/awakening.js`, the default level)
 Four separated zones around a central chasm; each role spawns in its own zone and ends on a viewing platform where the camera pulls back to reveal the other three. Scout: rocks, crawl under a pipe, wall-jump shafts (90 px and 60 px wide, second entered by crawling), mesh, practice gap, sprint+dash gap. Warden: push block, throw crate onto a switch, smash, a harmless slow crusher then a real one (brace), cracked floor drop. Anchor: wind gusts (plant), latching heavy plate lowers a drawbridge, slam breaks debris into a tunnel. Weaver: darkness, beam reveals the path, node opens a latched door, phantom bridges with a light-energy lesson, flare scare. One Hollow glimpse per zone. Open the Ability Gym with `?level=gym`.
 
+### Zone pacing (each Awakening zone ≈ 2 minutes)
+Every solo zone follows the same rhythm, so players have time to look around and wonder "what is happening here?":
+**explore → learn 1st ability → explore → learn 2nd → movement → interaction → learn 3rd → interaction → movement → learn 4th → mix of all → viewing platform.**
+Quiet "explore" stretches carry the world-building (Hollow glimpses, rumbles, strange silhouettes). Interactions use **levers** (press E; they stay pulled) that open gates or lower bridges.
+Status: the **Scout zone** is rebuilt to this rhythm (x 0–9480, 12 beats); Warden, Anchor and Weaver still use the original short layouts (moved right so they meet the chasm at x 9500–10500) and get the same treatment next.
+
 ### Implementation status
 All four roles are implemented in the **Ability Gym** (`js/levels/gym.js`), a developer test level with one station per ability. Keys 1–4 switch roles for testing. Not yet implemented: Weaver repel on threats (no threats exist yet), Anchor slam stun (no Tracers yet), Warden brace on doors (only crushers so far).
 
@@ -239,6 +245,7 @@ When a player is killed by a threat or hazard, they are **Taken**, not removed:
 | Prologue | Playable, per-character rooms (text allowed) |
 | Main threat | The Hollow (hunt isolated players) |
 | Area threats | Watchers, Eaters, Tracers, Overflow, Collector; final: Codex Core |
+| Zone length & pacing | ~2 min per solo zone; explore → learn → use → combine rhythm (see §2 Zone pacing) |
 
 ## 8. OPEN Questions
 - Checkpoint placement rules, and which hazards are instant team restarts.

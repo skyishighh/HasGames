@@ -90,6 +90,12 @@ export class Level {
       view: add.rectangle(b.x + b.w / 2, b.y + b.h / 2, b.w, b.h, 0x444444).setStrokeStyle(1, 0x999999, 0.6),
     }));
     this.gates = (data.gates ?? []).map((g) => (g.bridge ? this.#bridge(g) : this.#gate(g)));
+    // Levers: { id, x, y (floor under it), opens }. Pull with E; they stay pulled.
+    this.levers = (data.levers ?? []).map((l) => {
+      const lv = { data: l, on: false, zone: new Phaser.Geom.Rectangle(l.x - 28, l.y - 60, 56, 60), view: add.graphics().setDepth(2) };
+      this.#drawLever(lv);
+      return lv;
+    });
     this.nodes = (data.nodes ?? []).map((n) => ({
       data: n, lit: false, litUntil: 0, latched: false,
       view: add.circle(n.x, n.y, 7, 0x333333).setStrokeStyle(2, 0x111111),
@@ -178,6 +184,7 @@ export class Level {
       gates: this.gates.map((g) => g.open),
       plates: this.plates.map((p) => p.pressed),
       buttons: this.buttons.map((b) => b.pressed),
+      levers: this.levers.map((l) => l.on),
       nodes: this.nodes.map((n) => n.lit || n.latched),
       phantom: this.phantom.map((p) => p.lit),
       crushers: this.crushers.map((c) => Math.round(c.view.y)),
@@ -198,6 +205,7 @@ export class Level {
       b.pressed = !!v;
       b.view.fillColor = v ? 0xdddddd : 0x444444;
     });
+    s.levers?.forEach((v, i) => this.setLever(i, !!v));
     s.nodes?.forEach((v, i) => {
       const n = this.nodes[i]; if (!n) return;
       if (!this.host) n.lit = !!v;
@@ -233,6 +241,24 @@ export class Level {
   }
 
   breakObject(b) { this.#breakVisual(b); }
+
+  setLever(i, on) {
+    const lv = this.levers[i];
+    if (!lv || lv.on === on) return;
+    lv.on = on;
+    this.#drawLever(lv);
+  }
+
+  /** A rough post with a handle: leaning left when off, flipped right (with a faint glow) when pulled. */
+  #drawLever(lv) {
+    const { x, y } = lv.data, g = lv.view.clear();
+    g.fillStyle(INK, 1).fillRect(x - 7, y - 12, 14, 12);                      // base
+    const a = lv.on ? 0.55 : -0.55, len = 30;
+    const hx = x + Math.sin(a) * len, hy = y - 10 - Math.cos(a) * len;
+    g.lineStyle(4, INK, 1).lineBetween(x, y - 10, hx, hy);
+    g.fillCircle(hx, hy, 4);
+    if (lv.on) g.fillStyle(0xffffff, 0.25).fillCircle(hx, hy, 7);
+  }
 
   setFragmentTaken(i, taken) {
     const f = this.fragments[i];

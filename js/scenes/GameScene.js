@@ -339,6 +339,7 @@ export class GameScene extends Phaser.Scene {
 
     for (const p of players) p.step(ctx);
     this.#stepWorld(ctx);
+    for (const p of players) p.interactPressed = false;
 
     // Code Fragments: the matching role touching one earns its ability.
     this.level.fragments.forEach((f, i) => {
@@ -385,6 +386,10 @@ export class GameScene extends Phaser.Scene {
     });
     // Switches: pressed by a thrown crate, then stay pressed.
     for (const b of L.buttons) if (!b.pressed && L.crates.some((c) => hit(c.view.getBounds(), b.rect))) b.pressed = true;
+    // Levers: pressing E within reach pulls one; it stays pulled.
+    L.levers.forEach((lv, i) => {
+      if (!lv.on && players.some((p) => p.interactPressed && hit(p.bounds, lv.zone))) L.setLever(i, true);
+    });
     // Nodes: lit while light hits them; latching nodes stay on once powered.
     for (const n of L.nodes) {
       n.lit = n.litUntil > time;
@@ -399,7 +404,8 @@ export class GameScene extends Phaser.Scene {
       const plate = L.plates.find((p) => p.data.opens === g.data.id);
       const node = L.nodes.find((n) => n.data.opens === g.data.id);
       const button = L.buttons.find((b) => b.data.opens === g.data.id);
-      const wantOpen = !!(plate?.pressed || node?.lit || node?.latched || button?.pressed);
+      const lever = L.levers.find((lv) => lv.data.opens === g.data.id);
+      const wantOpen = !!(plate?.pressed || node?.lit || node?.latched || button?.pressed || lever?.on);
       const blocked = players.some((p) => hit(p.bounds, new Phaser.Geom.Rectangle(g.data.x, g.data.y, g.data.w, g.data.h)));
       L.setGateOpen(i, wantOpen || (g.open && blocked));
     });

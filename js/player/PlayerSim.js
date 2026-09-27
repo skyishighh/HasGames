@@ -141,6 +141,8 @@ export class PlayerSim {
 
     if (this.ride) { this.#stepRide(dt); this.pressed = {}; return; }
 
+    // E press, read by the world step this frame (levers). Cleared by the scene after the world step.
+    if (pr.interact) this.interactPressed = true;
     // Chain: anyone (except the planted anchor holding it) presses E near either end to ride it.
     if (pr.interact && ctx.level.chain && !this.planted) this.#tryRide(ctx.level.chain);
 

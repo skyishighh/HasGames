@@ -1,67 +1,137 @@
 // Act II — "The Solo Awakening". Four separated zones, one per role, each ending on a
-// viewing platform at the rim of a central chasm (x 2500–3500) where the players
+// viewing platform at the rim of a central chasm (x 9500–10500) where the players
 // first see each other. Rectangles: { x, y, w, h }, (x, y) = top-left. y grows downward.
 //
-//   top-left    : Scout  — "The Pit"          (wakes bottom-left, climbs up and right)
+//   top-left    : Scout  — "The Pit"          (wakes far left, ~2 min journey right and up)
 //   bottom-left : Warden — "The Collapse"     (wakes left, pushes right)
 //   top-right   : Anchor — "The Cliff"        (wakes right, walks left against the wind)
 //   bottom-right: Weaver — "The Dark Tunnel"  (wakes right, walks left in darkness)
-export default {
-  name: 'The Awakening',
-  width: 6000,
-  height: 1600,
-  parallax: false,
+//
+// Every zone follows the same rhythm (see docs/GAME_DESIGN.md → "Zone pacing"):
+// explore → learn 1st ability → explore → learn 2nd → movement → interaction → learn 3rd →
+// interaction → movement → learn 4th → mix of all → viewing platform.
+// The Scout zone is built to this rhythm; the other three zones are the original short versions,
+// moved right by DX so they still meet at the chasm. They get the same treatment next.
 
-  // Painted backgrounds in assets/bg/ (see docs/ART_PROMPTS.md). Each zone has its own set and they
-  // cross-fade at the borders; a missing zone image falls back to the default one.
-  backdrops: {
-    enabled: false,     // OFF for now: art direction to be re-discussed (images kept in assets/bg/)
-    foreground: true,   // blurred black silhouettes made from each zone's mid image, in front of play
-    default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
-    zones: {
-      pit:      { rect: { x: 0, y: 0, w: 2500, h: 1000 },    sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
-      collapse: { rect: { x: 0, y: 1000, w: 2500, h: 600 },  sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
-      cliff:    { rect: { x: 3500, y: 0, w: 2500, h: 1000 }, sky: 'cliff_sky.png',    far: 'cliff_far.png',    mid: 'cliff_mid.png' },
-      tunnel:   { rect: { x: 3500, y: 1000, w: 2500, h: 600 }, sky: 'tunnel_sky.png', far: 'tunnel_far.png',   mid: 'tunnel_mid.png' },
-      chasm:    { rect: { x: 2500, y: 0, w: 1000, h: 1600 } },   // uses the default forest set
-    },
-  },
+const DX = 7000;                                              // how far the old zones moved right
+const shift = (list) => list.map((o) => ({ ...o, x: o.x + DX }));
 
-  spawns: {
-    scout: { x: 150, y: 900 },
-    warden: { x: 150, y: 1540 },
-    anchor: { x: 5760, y: 700 },
-    weaver: { x: 5850, y: 1540 },
-  },
-
-  // Respawn points (feet position). Touching one makes it your checkpoint.
-  checkpoints: [
-    { x: 150, y: 900 }, { x: 745, y: 900 }, { x: 950, y: 740 }, { x: 1320, y: 380 }, { x: 1700, y: 120 }, { x: 2150, y: 120 },
-    { x: 150, y: 1540 }, { x: 760, y: 1440 }, { x: 1330, y: 1440 }, { x: 1550, y: 1440 }, { x: 1850, y: 1540 },
-    { x: 5760, y: 700 }, { x: 5250, y: 700 }, { x: 4500, y: 700 }, { x: 4050, y: 700 },
-    { x: 5850, y: 1540 }, { x: 5150, y: 1540 }, { x: 4670, y: 1540 }, { x: 4325, y: 1540 }, { x: 3970, y: 1540 },
-  ],
-
+// ======================================================================= SCOUT — The Pit
+// Beats (x ranges): 1 explore 0–1500 · 2 crawl 1500–2100 · 3 explore 2100–3500 ·
+// 4 wall-jump 3500–3830 · 5 movement 3830–5200 · 6 lever 5200–5900 · 7 climb 5900–6400 ·
+// 8 lever + climb 6400–7000 · 9 drop / crawl-under / wall-jump 7000–7700 · 10 dash 7700–8200 ·
+// 11 mix (crawl, drop, climb, dash) 8200–9480 · 12 viewing platform 9480.
+const SCOUT = {
   solids: [
-    // --- rock layers separating the zones
-    { x: 0, y: 940, w: 2500, h: 120 },
-    { x: 3500, y: 940, w: 2500, h: 120 },
+    { x: 0, y: 940, w: 9500, h: 120 },          // bedrock under the whole Scout zone
+    { x: 0, y: 1060, w: DX, h: 540 },           // solid earth left of the Warden zone
 
-    // ================= SCOUT — The Pit =================
-    { x: 0, y: 900, w: 880, h: 40 },            // pit floor
+    // 1 · Explore: wake in the dark, uneven ground, a figure on a far ledge.
+    { x: 0, y: 900, w: 3700, h: 40 },           // cave floor (beats 1–4)
     { x: 300, y: 872, w: 30, h: 28 },           // rocks to hop over
     { x: 450, y: 880, w: 40, h: 20 },
-    { x: 560, y: 300, w: 140, h: 600, vent: true }, // fallen pipe: a crawling Scout passes under it
-    { x: 790, y: 740, w: 510, h: 200 },         // shaft 1 right wall / ledge (160 high, 90 wide: needs a wall-jump)
-    { x: 1260, y: 380, w: 240, h: 360 },        // mesh wall face and top ledge
-    { x: 1500, y: 380, w: 120, h: 40 },
-    { x: 1520, y: 120, w: 20, h: 260, vent: true }, // shaft 2 (narrow, tall): left wall; crawl through its base
-    { x: 1600, y: 120, w: 20, h: 260 },         // shaft 2 right wall
-    { x: 1620, y: 120, w: 280, h: 40 },         // top shelf
-    { x: 1900, y: 200, w: 200, h: 40 },         // practice gap: shallow trench floor (harmless)
-    { x: 2100, y: 120, w: 100, h: 40 },
-    { x: 2480, y: 120, w: 160, h: 40 },         // VIEWING PLATFORM (Scout)
-    { x: 2634, y: 86, w: 6, h: 34 },            // railing post at the chasm edge
+    { x: 700, y: 860, w: 300, h: 40 },          // low mound
+    { x: 1100, y: 820, w: 120, h: 80 },         // boulder
+    { x: 1250, y: 640, w: 250, h: 20 },         // unreachable ledge (something stands there)
+
+    // 2 · Learn crawl: a fallen pipe blocks the way; only crawling gets under it.
+    { x: 1700, y: 300, w: 140, h: 600, vent: true },
+
+    // 3 · Explore: rising steps to a lookout, then back down. Room to look around.
+    { x: 2300, y: 860, w: 200, h: 40 },
+    { x: 2500, y: 820, w: 250, h: 80 },
+    { x: 2750, y: 780, w: 300, h: 120 },        // lookout
+    { x: 3050, y: 820, w: 150, h: 80 },
+    { x: 3200, y: 860, w: 150, h: 40 },
+    { x: 3150, y: 500, w: 200, h: 20 },         // far ledge above (another watcher)
+
+    // 4 · Learn wall-jump: crawl through the pipe wall into a narrow shaft, wall-jump out.
+    { x: 3700, y: 500, w: 40, h: 400, vent: true }, // left wall of the shaft (crawl through its base)
+    { x: 3740, y: 900, w: 90, h: 40 },          // shaft floor
+    { x: 3830, y: 740, w: 570, h: 200 },        // ledge on top (160 up: too high to jump)
+
+    // 5 · Movement: gaps, a crawl-only slot under a rock, more gaps.
+    { x: 4540, y: 740, w: 220, h: 200 },
+    { x: 4760, y: 740, w: 300, h: 200 },
+    { x: 4860, y: 380, w: 100, h: 280 },        // overhanging rock…
+    { x: 4860, y: 660, w: 100, h: 80, vent: true }, // …with a slot under it: crawl through
+
+    // 6 · Interaction: a gate blocks the path; the lever beside it opens it.
+    { x: 5200, y: 740, w: 860, h: 200 },        // long platform (beats 6–7)
+
+    // 7 · Learn climb: a wall with a climbable mesh.
+    { x: 6060, y: 380, w: 340, h: 560 },        // cliff block, top at 380
+
+    // 8 · Interaction + climb: climb to an alcove, pull the lever, a bridge lowers over the gap.
+    { x: 6180, y: 200, w: 140, h: 16 },         // alcove shelf with the lever
+    { x: 6700, y: 380, w: 300, h: 560 },        // far side of the gap
+
+    // 9 · Movement: drop down, crawl-walk under a hanging wall, wall-jump up the shaft.
+    { x: 7000, y: 560, w: 400, h: 380 },        // lower floor (also the shaft floor)
+    { x: 7270, y: 160, w: 40, h: 340 },         // hanging wall (gap of 60 under it)
+    { x: 7400, y: 120, w: 300, h: 820 },        // tall block, top at 120
+
+    // 10 · Learn dash: a gap too wide to jump.
+    { x: 7980, y: 120, w: 220, h: 820 },        // landing after the dash gap
+
+    // 11 · Mix: crawl slot, drop, climb, final dash.
+    { x: 8200, y: 0, w: 200, h: 90 },           // low rock ceiling…
+    { x: 8200, y: 90, w: 200, h: 30, vent: true }, // …crawl-only slot under it
+    { x: 8200, y: 120, w: 200, h: 820 },
+    { x: 8400, y: 400, w: 260, h: 540 },        // drop down
+    { x: 8700, y: 120, w: 300, h: 820 },        // climb back up (mesh on its left face)
+    { x: 9280, y: 120, w: 200, h: 820 },        // landing after the final dash
+    { x: 9480, y: 120, w: 160, h: 40 },         // 12 · VIEWING PLATFORM (Scout)
+    { x: 9634, y: 86, w: 6, h: 34 },            // railing post at the chasm edge
+  ],
+  hazards: [
+    { x: 4400, y: 880, w: 140, h: 60 },         // pits in the movement run
+    { x: 5060, y: 880, w: 140, h: 60 },
+    { x: 6400, y: 880, w: 300, h: 60 },         // under the lowered bridge
+    { x: 7700, y: 880, w: 280, h: 60 },         // dash gap
+    { x: 8660, y: 880, w: 40, h: 60 },
+    { x: 9000, y: 880, w: 280, h: 60 },         // final dash gap
+  ],
+  mesh: [
+    { x: 6000, y: 380, w: 60, h: 360 },         // 7 · first climb
+    { x: 6320, y: 200, w: 40, h: 180 },         // 8 · up to the lever alcove
+    { x: 8660, y: 120, w: 40, h: 280 },         // 11 · climb back up
+  ],
+  levers: [
+    { id: 'l1', x: 5450, y: 740, opens: 'gs1' },
+    { id: 'l2', x: 6230, y: 200, opens: 'brs1' },
+  ],
+  gates: [
+    { id: 'gs1', x: 5600, y: 540, w: 24, h: 200 },                 // 6 · lever gate
+    { id: 'brs1', x: 6400, y: 380, w: 300, h: 14, bridge: true },  // 8 · lever bridge
+  ],
+  fragments: [
+    { role: 'scout', ability: 'crawl', x: 1580, y: 900 },
+    { role: 'scout', ability: 'walljump', x: 3620, y: 900 },
+    { role: 'scout', ability: 'climb', x: 5900, y: 740 },
+    { role: 'scout', ability: 'dash', x: 7620, y: 120 },
+  ],
+  checkpoints: [
+    { x: 150, y: 900 }, { x: 1000, y: 860 }, { x: 1620, y: 900 }, { x: 2900, y: 780 }, { x: 3620, y: 900 },
+    { x: 3900, y: 740 }, { x: 5300, y: 740 }, { x: 5950, y: 740 }, { x: 6150, y: 380 }, { x: 6780, y: 380 },
+    { x: 7100, y: 560 }, { x: 7450, y: 120 }, { x: 8050, y: 120 }, { x: 8480, y: 400 }, { x: 8780, y: 120 },
+  ],
+  dark: [{ x: 0, y: 500, w: 900, h: 440, alpha: 0.55 }],
+  hollows: [
+    { x: 1375, y: 640, type: 'watch', radius: 260 },               // 1 · on the far ledge
+    { x: 3250, y: 500, type: 'watch', radius: 300 },               // 3 · watching from above the lookout
+  ],
+  triggers: [
+    { x: 2800, y: 600, w: 100, h: 180, action: 'shake' },          // 3 · a rumble at the lookout
+    { x: 9480, y: 0, w: 160, h: 120, action: 'reveal' },
+  ],
+};
+
+// ============================================= WARDEN, ANCHOR, WEAVER (original layout, moved by DX)
+const REST = {
+  solids: [
+    // --- rock layer separating the right-hand zones
+    { x: 3500, y: 940, w: 2500, h: 120 },
 
     // ================= WARDEN — The Collapse =================
     { x: 0, y: 1060, w: 400, h: 380 },          // collapsed iron: low ceiling over the start
@@ -96,14 +166,11 @@ export default {
 
   // Falling into these respawns you at your checkpoint.
   hazards: [
-    { x: 1500, y: 880, w: 1000, h: 60 },        // void under the Scout's upper route
     { x: 4100, y: 880, w: 250, h: 60 },         // gap under the Anchor's bridge
     { x: 5920, y: 660, w: 80, h: 280 },         // cliff edge behind the Anchor
     { x: 4000, y: 1580, w: 300, h: 20 },        // Weaver: pits under the long bridges
     { x: 4350, y: 1580, w: 290, h: 20 },
   ],
-
-  mesh: [{ x: 1200, y: 380, w: 60, h: 360 }],
 
   // Warden
   blocks: [{ id: 'b1', x: 480, y: 1480, w: 60, h: 60 }],
@@ -140,27 +207,7 @@ export default {
     { id: 'br1', x: 4100, y: 700, w: 250, h: 14, bridge: true },   // Anchor drawbridge (heavy plate)
   ],
 
-  // Darkness (alpha = how dark). The Weaver's light cuts through.
-  dark: [
-    { x: 3500, y: 1060, w: 2500, h: 540, alpha: 0.97 },
-    { x: 0, y: 500, w: 900, h: 440, alpha: 0.55 },
-    { x: 0, y: 1060, w: 700, h: 540, alpha: 0.5 },
-  ],
-
-  // Wordless atmosphere: a Hollow watching (vanishes when you get close).
-  hollows: [
-    { x: 1400, y: 380, type: 'watch', radius: 260 },                // Scout: on the rim above
-    { x: 2260, y: 1540, type: 'watch', radius: 180, grate: true },  // Warden: behind a grate
-    { x: 4720, y: 700, type: 'watch', radius: 200 },                // Anchor: standing in the storm
-    { x: 3790, y: 1540, type: 'dark', radius: 60 },                 // Weaver: revealed by the flare
-  ],
-
-  // Code Fragments: each unlocks one ability, placed right before its first use.
   fragments: [
-    { role: 'scout', ability: 'crawl', x: 528, y: 900 },
-    { role: 'scout', ability: 'walljump', x: 745, y: 900 },
-    { role: 'scout', ability: 'climb', x: 1170, y: 740 },
-    { role: 'scout', ability: 'dash', x: 1850, y: 120 },
     { role: 'warden', ability: 'push', x: 420, y: 1540 },
     { role: 'warden', ability: 'lift', x: 760, y: 1440 },
     { role: 'warden', ability: 'smash', x: 1190, y: 1440 },
@@ -171,16 +218,89 @@ export default {
     { role: 'weaver', ability: 'flare', x: 3975, y: 1540 },
   ],
 
+  // Respawn points (feet position). Touching one makes it your checkpoint.
+  checkpoints: [
+    { x: 150, y: 1540 }, { x: 760, y: 1440 }, { x: 1330, y: 1440 }, { x: 1550, y: 1440 }, { x: 1850, y: 1540 },
+    { x: 5760, y: 700 }, { x: 5250, y: 700 }, { x: 4500, y: 700 }, { x: 4050, y: 700 },
+    { x: 5850, y: 1540 }, { x: 5150, y: 1540 }, { x: 4670, y: 1540 }, { x: 4325, y: 1540 }, { x: 3970, y: 1540 },
+  ],
+
+  // Darkness (alpha = how dark). The Weaver's light cuts through.
+  dark: [
+    { x: 3500, y: 1060, w: 2500, h: 540, alpha: 0.97 },
+    { x: 0, y: 1060, w: 700, h: 540, alpha: 0.5 },
+  ],
+
+  // Wordless atmosphere: a Hollow watching (vanishes when you get close).
+  hollows: [
+    { x: 2260, y: 1540, type: 'watch', radius: 180, grate: true },  // Warden: behind a grate
+    { x: 4720, y: 700, type: 'watch', radius: 200 },                // Anchor: standing in the storm
+    { x: 3790, y: 1540, type: 'dark', radius: 60 },                 // Weaver: revealed by the flare
+  ],
+
   // Client-side scripted moments.
   triggers: [
-    { x: 2480, y: 0, w: 160, h: 120, action: 'reveal' },
     { x: 2400, y: 1300, w: 240, h: 240, action: 'reveal' },
     { x: 3380, y: 720, w: 120, h: 160, action: 'reveal' },
     { x: 3380, y: 1300, w: 120, h: 240, action: 'reveal' },
     { x: 3880, y: 1300, w: 60, h: 240, action: 'shake' },           // Weaver: "a sound in the dark"
   ],
-  reveal: { x: 3000, y: 830, zoom: 0.38 },
+};
+
+const merged = (key) => [...(SCOUT[key] ?? []), ...shift(REST[key] ?? [])];
+
+export default {
+  name: 'The Awakening',
+  width: 6000 + DX,
+  height: 1600,
+  parallax: false,
+
+  // Painted backgrounds in assets/bg/ (see docs/ART_PROMPTS.md). Each zone has its own set and they
+  // cross-fade at the borders; a missing zone image falls back to the default one.
+  backdrops: {
+    enabled: false,     // OFF for now: art direction to be re-discussed (images kept in assets/bg/)
+    foreground: true,   // blurred black silhouettes made from each zone's mid image, in front of play
+    default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
+    zones: {
+      pit:      { rect: { x: 0, y: 0, w: 2500 + DX, h: 1000 },  sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
+      collapse: { rect: { x: DX, y: 1000, w: 2500, h: 600 },    sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
+      cliff:    { rect: { x: 3500 + DX, y: 0, w: 2500, h: 1000 }, sky: 'cliff_sky.png',  far: 'cliff_far.png',    mid: 'cliff_mid.png' },
+      tunnel:   { rect: { x: 3500 + DX, y: 1000, w: 2500, h: 600 }, sky: 'tunnel_sky.png', far: 'tunnel_far.png', mid: 'tunnel_mid.png' },
+      chasm:    { rect: { x: 2500 + DX, y: 0, w: 1000, h: 1600 } },   // uses the default forest set
+    },
+  },
+
+  spawns: {
+    scout: { x: 150, y: 900 },
+    warden: { x: 150 + DX, y: 1540 },
+    anchor: { x: 5760 + DX, y: 700 },
+    weaver: { x: 5850 + DX, y: 1540 },
+  },
+
+  checkpoints: merged('checkpoints'),
+  solids: merged('solids'),
+  hazards: merged('hazards'),
+  mesh: merged('mesh'),
+  levers: merged('levers'),
+  blocks: merged('blocks'),
+  crates: merged('crates'),
+  buttons: merged('buttons'),
+  cracked: merged('cracked'),
+  crushers: merged('crushers'),
+  fragile: merged('fragile'),
+  wind: merged('wind'),
+  plates: merged('plates'),
+  debris: merged('debris'),
+  nodes: merged('nodes'),
+  phantom: merged('phantom'),
+  gates: merged('gates'),
+  dark: merged('dark'),
+  hollows: merged('hollows'),
+  // Code Fragments: each unlocks one ability, placed right before its first use.
+  fragments: merged('fragments'),
+  triggers: merged('triggers'),
+  reveal: { x: 3000 + DX, y: 830, zoom: 0.38 },
 
   // The central vault the players will open together in Act III (background only for now).
-  vault: { x: 2780, y: 520, w: 440, h: 620 },
+  vault: { x: 2780 + DX, y: 520, w: 440, h: 620 },
 };
