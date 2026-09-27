@@ -7,14 +7,10 @@
 //   top-right   : Anchor — "The Cliff"        (wakes right, walks left against the wind)
 //   bottom-right: Weaver — "The Dark Tunnel"  (wakes right, walks left in darkness)
 //
-// Every zone follows the same rhythm (see docs/GAME_DESIGN.md → "Zone pacing"):
-// explore → learn 1st ability → explore → learn 2nd → movement → interaction → learn 3rd →
-// interaction → movement → learn 4th → mix of all → viewing platform.
-// The Scout zone is built to this rhythm; the other three zones are the original short versions,
-// moved right by DX so they still meet at the chasm. They get the same treatment next.
-
-const DX = 7000;                                              // how far the old zones moved right
-const shift = (list) => list.map((o) => ({ ...o, x: o.x + DX }));
+// Every zone follows the same ~2 minute rhythm (see docs/GAME_DESIGN.md → "Zone pacing"):
+// explore → learn an ability → explore → movement → interaction → learn the next → interaction →
+// movement → mix of all → viewing platform. Each zone is its own block below; they are merged at
+// the bottom of the file.
 
 // ======================================================================= SCOUT — The Pit
 // Beats (x ranges): 1 explore 0–1500 · 2 crawl 1500–2100 · 3 explore 2100–3500 ·
@@ -281,69 +277,84 @@ const ANCHOR = {
   ],
 };
 
-// ========================================================= WEAVER (original layout, moved by DX)
-const REST = {
+// ================================================================ WEAVER — The Dark Tunnel
+// Bottom right (y 1060–1600), walking LEFT in darkness from x 20000 to the chasm. Beats (x ranges):
+// 1 explore (dim) 18600–20000 · 2 beam over a harmless trench 17600–18600 · 3 explore by beam-light
+// 16400–17600 · 4 movement: phantom bridges with a recharge island 15200–16400 · 5 node opens a door
+// 14400–15200 · 6 flare: a node hidden behind a gate (beams stop at walls, flares don't) 13800–14400 ·
+// 7 lever bridge (a rest) 13000–13800 · 8 movement: long bridges, manage light 11800–13000 ·
+// 9 mix: node door + flare-behind-gate door 10500–11800 · 10 viewing platform 10380.
+const ph = (id, x, n, w = 100) => Array.from({ length: n }, (_, i) => ({ id: `${id}${i}`, x: x + i * w, y: 1540, w, h: 16 }));
+const WEAVER = {
   solids: [
-    // ================= WEAVER — The Dark Tunnel =================
-    { x: 3500, y: 1060, w: 2500, h: 240 },      // tunnel ceiling
-    { x: 5660, y: 1540, w: 340, h: 60 },        // start floor
-    { x: 5600, y: 1590, w: 60, h: 10 },         // small dark dip (harmless)
-    { x: 4950, y: 1540, w: 650, h: 60 },
-    { x: 4700, y: 1560, w: 250, h: 40 },        // shallow trench under the first phantom bridge (harmless)
-    { x: 4640, y: 1540, w: 60, h: 60 },         // safe pad: recharge before the long bridges
-    { x: 4300, y: 1540, w: 50, h: 60 },         // island to recharge light between two long bridges
-    { x: 3380, y: 1540, w: 620, h: 60 },        // → VIEWING PLATFORM (Weaver)
-    { x: 3380, y: 1506, w: 6, h: 34 },          // railing post
+    { x: 10500, y: 1060, w: 9500, h: 240 },     // tunnel ceiling
+    { x: 18600, y: 1540, w: 1400, h: 60 },      // 1 · start
+    { x: 19300, y: 1510, w: 60, h: 30 },        // rocks
+    { x: 18900, y: 1500, w: 80, h: 40 },
+    { x: 18300, y: 1540, w: 300, h: 60 },       // 2
+    { x: 18000, y: 1570, w: 300, h: 30 },       // harmless trench under the first bridge
+    { x: 17600, y: 1540, w: 400, h: 60 },
+    { x: 16400, y: 1540, w: 1200, h: 60 },      // 3
+    { x: 17200, y: 1500, w: 100, h: 40 },
+    { x: 16800, y: 1490, w: 120, h: 50 },
+    { x: 16000, y: 1540, w: 100, h: 60 },       // 4 · recharge island
+    { x: 14400, y: 1540, w: 1300, h: 60 },      // 4–5
+    { x: 13800, y: 1540, w: 600, h: 60 },       // 6
+    { x: 13600, y: 1540, w: 200, h: 60 },       // 7 · lever ledge
+    { x: 13000, y: 1540, w: 300, h: 60 },       // 7–8
+    { x: 12640, y: 1540, w: 60, h: 60 },        // 8 · recharge island
+    { x: 10380, y: 1540, w: 1960, h: 60 },      // 9 → VIEWING PLATFORM (Weaver)
+    { x: 10380, y: 1506, w: 6, h: 34 },         // railing post
   ],
-
-  // Falling into these respawns you at your checkpoint.
   hazards: [
-    { x: 4000, y: 1580, w: 300, h: 20 },        // Weaver: pits under the long bridges
-    { x: 4350, y: 1580, w: 290, h: 20 },
+    { x: 16100, y: 1580, w: 300, h: 20 },       // 4 · pits under the phantom bridges
+    { x: 15700, y: 1580, w: 300, h: 20 },
+    { x: 13300, y: 1580, w: 300, h: 20 },       // 7 · under the lever bridge
+    { x: 12700, y: 1580, w: 300, h: 20 },       // 8
+    { x: 12340, y: 1580, w: 300, h: 20 },
   ],
-
-  // Weaver
-  nodes: [{ id: 'n1', x: 5300, y: 1360, opens: 'g2', latch: true }],
   phantom: [
-    // first bridge (short, over a harmless trench)
-    { id: 'ph1', x: 4700, y: 1540, w: 84, h: 16 }, { id: 'ph2', x: 4784, y: 1540, w: 84, h: 16 }, { id: 'ph3', x: 4868, y: 1540, w: 82, h: 16 },
-    // long bridges: light drains — recharge on the island in between
-    { id: 'ph4', x: 4350, y: 1540, w: 97, h: 16 }, { id: 'ph5', x: 4447, y: 1540, w: 97, h: 16 }, { id: 'ph6', x: 4544, y: 1540, w: 96, h: 16 },
-    { id: 'ph7', x: 4000, y: 1540, w: 100, h: 16 }, { id: 'ph8', x: 4100, y: 1540, w: 100, h: 16 }, { id: 'ph9', x: 4200, y: 1540, w: 100, h: 16 },
+    ...ph('pa', 18000, 3),                      // 2 · first bridge (harmless trench)
+    ...ph('pb', 16100, 3), ...ph('pc', 15700, 3),
+    ...ph('pd', 12700, 3), ...ph('pe', 12340, 3),
   ],
-
+  nodes: [
+    { id: 'nv1', x: 14900, y: 1360, opens: 'gv1', latch: true },  // 5 · light it with the beam
+    { id: 'nv2', x: 13820, y: 1480, opens: 'gv2', latch: true },  // 6 · behind its gate: only a flare reaches
+    { id: 'nv3', x: 11650, y: 1360, opens: 'gv3', latch: true },  // 9
+    { id: 'nv4', x: 11020, y: 1480, opens: 'gv4', latch: true },  // 9 · behind its gate again
+  ],
+  levers: [{ id: 'lv1', x: 13700, y: 1540, opens: 'brv1' }],
   gates: [
-    { id: 'g2', x: 5200, y: 1300, w: 24, h: 240 },                 // Weaver door (light the node)
+    { id: 'gv1', x: 14600, y: 1300, w: 24, h: 240 },
+    { id: 'gv2', x: 13900, y: 1300, w: 24, h: 240 },
+    { id: 'brv1', x: 13300, y: 1540, w: 300, h: 14, bridge: true },
+    { id: 'gv3', x: 11500, y: 1300, w: 24, h: 240 },
+    { id: 'gv4', x: 11100, y: 1300, w: 24, h: 240 },
   ],
-
   fragments: [
-    { role: 'weaver', ability: 'beam', x: 5790, y: 1540 },
-    { role: 'weaver', ability: 'flare', x: 3975, y: 1540 },
+    { role: 'weaver', ability: 'beam', x: 18500, y: 1540 },
+    { role: 'weaver', ability: 'flare', x: 14350, y: 1540 },
   ],
-
-  // Respawn points (feet position). Touching one makes it your checkpoint.
   checkpoints: [
-    { x: 5850, y: 1540 }, { x: 5150, y: 1540 }, { x: 4670, y: 1540 }, { x: 4325, y: 1540 }, { x: 3970, y: 1540 },
+    { x: 19850, y: 1540 }, { x: 18700, y: 1540 }, { x: 18400, y: 1540 }, { x: 17500, y: 1540 }, { x: 16450, y: 1540 },
+    { x: 16050, y: 1540 }, { x: 15600, y: 1540 }, { x: 14700, y: 1540 }, { x: 14000, y: 1540 }, { x: 13750, y: 1540 },
+    { x: 13100, y: 1540 }, { x: 12670, y: 1540 }, { x: 12300, y: 1540 }, { x: 11300, y: 1540 },
   ],
-
-  // Darkness (alpha = how dark). The Weaver's light cuts through.
   dark: [
-    { x: 3500, y: 1060, w: 2500, h: 540, alpha: 0.97 },
+    { x: 18600, y: 1060, w: 1400, h: 540, alpha: 0.85 },   // dim at the start: you can just make out shapes
+    { x: 10500, y: 1060, w: 8100, h: 540, alpha: 0.97 },   // then true darkness: only your light
   ],
-
-  // Wordless atmosphere: a Hollow watching (vanishes when you get close).
   hollows: [
-    { x: 3790, y: 1540, type: 'dark', radius: 60 },                 // Weaver: revealed by the flare
+    { x: 13780, y: 1540, type: 'dark', radius: 60 },       // 6 · revealed by the first flare
   ],
-
-  // Client-side scripted moments.
   triggers: [
-    { x: 3380, y: 1300, w: 120, h: 240, action: 'reveal' },
-    { x: 3880, y: 1300, w: 60, h: 240, action: 'shake' },           // Weaver: "a sound in the dark"
+    { x: 17000, y: 1300, w: 100, h: 240, action: 'shake' },  // 3 · "a sound in the dark"
+    { x: 10380, y: 1300, w: 120, h: 240, action: 'reveal' },
   ],
 };
 
-const merged = (key) => [...(SCOUT[key] ?? []), ...(WARDEN[key] ?? []), ...(ANCHOR[key] ?? []), ...shift(REST[key] ?? [])];
+const merged = (key) => [SCOUT, WARDEN, ANCHOR, WEAVER].flatMap((zone) => zone[key] ?? []);
 
 export default {
   name: 'The Awakening',
@@ -358,11 +369,11 @@ export default {
     foreground: true,   // blurred black silhouettes made from each zone's mid image, in front of play
     default: { sky: 'awakening_sky.png', far: 'awakening_far.png', mid: 'awakening_mid.png' },
     zones: {
-      pit:      { rect: { x: 0, y: 0, w: 2500 + DX, h: 1000 },  sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
-      collapse: { rect: { x: 0, y: 1000, w: 2500 + DX, h: 600 },    sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
+      pit:      { rect: { x: 0, y: 0, w: 9500, h: 1000 },  sky: 'pit_sky.png',      far: 'pit_far.png',      mid: 'pit_mid.png' },
+      collapse: { rect: { x: 0, y: 1000, w: 9500, h: 600 },    sky: 'collapse_sky.png', far: 'collapse_far.png', mid: 'collapse_mid.png' },
       cliff:    { rect: { x: 10500, y: 0, w: 9500, h: 1000 }, sky: 'cliff_sky.png',    far: 'cliff_far.png',    mid: 'cliff_mid.png' },
-      tunnel:   { rect: { x: 3500 + DX, y: 1000, w: 2500, h: 600 }, sky: 'tunnel_sky.png', far: 'tunnel_far.png', mid: 'tunnel_mid.png' },
-      chasm:    { rect: { x: 2500 + DX, y: 0, w: 1000, h: 1600 } },   // uses the default forest set
+      tunnel:   { rect: { x: 10500, y: 1000, w: 9500, h: 600 }, sky: 'tunnel_sky.png',  far: 'tunnel_far.png',   mid: 'tunnel_mid.png' },
+      chasm:    { rect: { x: 9500, y: 0, w: 1000, h: 1600 } },   // uses the default forest set
     },
   },
 
@@ -370,7 +381,7 @@ export default {
     scout: { x: 150, y: 900 },
     warden: { x: 150, y: 1540 },
     anchor: { x: 19760, y: 700 },
-    weaver: { x: 5850 + DX, y: 1540 },
+    weaver: { x: 19850, y: 1540 },
   },
 
   checkpoints: merged('checkpoints'),
@@ -395,8 +406,8 @@ export default {
   // Code Fragments: each unlocks one ability, placed right before its first use.
   fragments: merged('fragments'),
   triggers: merged('triggers'),
-  reveal: { x: 3000 + DX, y: 830, zoom: 0.38 },
+  reveal: { x: 10000, y: 830, zoom: 0.38 },
 
   // The central vault the players will open together in Act III (background only for now).
-  vault: { x: 2780 + DX, y: 520, w: 440, h: 620 },
+  vault: { x: 9780, y: 520, w: 440, h: 620 },
 };
