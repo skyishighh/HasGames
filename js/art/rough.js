@@ -7,6 +7,11 @@
 // A seeded random generator keeps every client's drawing identical.
 const INK = '#050505';
 const CHUNK = 1024;
+// Limbo's play layer is clear but never razor-sharp: every terrain/prop texture gets a light blur,
+// baked once. SEAM is the extra margin painted around each terrain chunk, so a chunk's softened edge
+// always sits under its neighbour's solid interior (no faint lines between chunks).
+const SOFTEN = 1;
+const SEAM = 4;
 
 /** A closed, slightly irregular outline around a rectangle (pushed outward so seams never show). */
 function roughOutline(rng, x, y, w, h, wobble = 2.5, step = 10) {
@@ -80,11 +85,12 @@ export function drawTerrain(scene, seed, solids, width, height, depth = 1) {
       if (!here.length) continue;
       const key = `terrain-${seed}-${cx}-${cy}`;
       if (scene.textures.exists(key)) scene.textures.remove(key);
-      // 1 px of overlap on each side hides the seam that texture filtering leaves at chunk edges.
-      const tex = scene.textures.createCanvas(key, CHUNK + 2, CHUNK + 2);
+      // SEAM px of overlap on each side hides chunk edges (texture filtering and the soften blur).
+      const size = CHUNK + SEAM * 2;
+      const tex = scene.textures.createCanvas(key, size, size);
       const ctx = tex.getContext();
       ctx.save();
-      ctx.translate(-cx + 1, -cy + 1);
+      ctx.translate(-cx + SEAM, -cy + SEAM);
       ctx.fillStyle = INK;
       ctx.lineCap = 'round';
       for (const s of here) {
@@ -95,8 +101,9 @@ export function drawTerrain(scene, seed, solids, width, height, depth = 1) {
         drawRoots(ctx, rng, solids, s);
       }
       ctx.restore();
+      soften(ctx, size, size);
       tex.refresh();
-      images.push(scene.add.image(cx - 1, cy - 1, key).setOrigin(0).setDepth(depth));
+      images.push(scene.add.image(cx - SEAM, cy - SEAM, key).setOrigin(0).setDepth(depth));
     }
   }
   return images;
@@ -145,6 +152,19 @@ export function roughTexture(scene, style, w, h, seed = 'prop') {
     for (let x = 0; x <= w; x += 8) ctx.lineTo(x + 4, h + 4), ctx.lineTo(x + 8, h);
     ctx.fill();
   }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  soften(ctx, ctx.canvas.width, ctx.canvas.height);
   tex.refresh();
   return key;
+}
+
+/** Re-draw a canvas through a light blur (the soft Limbo edge). */
+function soften(ctx, w, h) {
+  const copy = document.createElement('canvas');
+  copy.width = w; copy.height = h;
+  copy.getContext('2d').drawImage(ctx.canvas, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.filter = `blur(${SOFTEN}px)`;
+  ctx.drawImage(copy, 0, 0);
+  ctx.filter = 'none';
 }
