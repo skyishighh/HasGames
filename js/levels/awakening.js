@@ -12,6 +12,13 @@ export default {
   height: 1600,
   parallax: false,
 
+  // Painted background layers in assets/bg/ (see docs/ART_PROMPTS.md). Missing files are skipped.
+  backdrops: [
+    { key: 'sky', files: ['awakening_sky.png'], factor: 0 },
+    { key: 'far', files: ['awakening_far.png'], factor: 0.2 },
+    { key: 'mid', files: ['awakening_mid.png'], factor: 0.45 },
+  ],
+
   spawns: {
     scout: { x: 150, y: 900 },
     warden: { x: 150, y: 1540 },
