@@ -27,7 +27,7 @@ const SCOUT = {
     { x: 0, y: 1060, w: DX, h: 540 },           // solid earth left of the Warden zone
 
     // 1 · Explore: wake in the dark, uneven ground, a figure on a far ledge.
-    { x: 0, y: 900, w: 3700, h: 40 },           // cave floor (beats 1–4)
+    { x: 0, y: 900, w: 3740, h: 40 },           // cave floor (beats 1–4, runs under the shaft wall)
     { x: 300, y: 872, w: 30, h: 28 },           // rocks to hop over
     { x: 450, y: 880, w: 40, h: 20 },
     { x: 700, y: 860, w: 300, h: 40 },          // low mound
