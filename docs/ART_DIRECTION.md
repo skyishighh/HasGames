@@ -89,13 +89,10 @@ These are shared layers the code draws on top of everything. Art should not pain
 
 ---
 
-## 6. Colour decision (open)
+## 6. Colour decision (decided)
 
-The game is monochrome. **One option to decide later:** a single accent colour used only for Codex
-"digital" moments, such as glitches, the Core and fragments. For example, a faint cold cyan.
-- **Pro:** it tells the "trapped in a computer" story visually.
-- **Con:** it weakens the Limbo look.
-- **Current state:** pure monochrome.
+**Pure black and white, with no accent colour anywhere.** The "digital" Codex moments are shown
+through shape (grids, perfect geometry, glitchy flicker) and pure-white light, never through colour.
 
 ---
 
