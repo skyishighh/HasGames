@@ -113,7 +113,11 @@ Four separated zones around a central chasm; each role spawns in its own zone an
 Every solo zone follows the same rhythm, so players have time to look around and wonder "what is happening here?":
 **explore → learn 1st ability → explore → learn 2nd → movement → interaction → learn 3rd → interaction → movement → learn 4th → mix of all → viewing platform.**
 Quiet "explore" stretches carry the world-building (Hollow glimpses, rumbles, strange silhouettes). Interactions use **levers** (press E; they stay pulled) that open gates or lower bridges.
-Status: the **Scout zone** is rebuilt to this rhythm (x 0–9480, 12 beats); Warden, Anchor and Weaver still use the original short layouts (moved right so they meet the chasm at x 9500–10500) and get the same treatment next.
+Status: **all four zones are rebuilt** to this rhythm. The level is 20,000 px wide: Scout (top) and Warden (below it) travel right from x 0 to the chasm at x 9500–10500; Anchor (top) and Weaver (below it) travel left from x 20,000. Roles with two abilities (Anchor, Weaver) use the extra beats for interactions and mixes:
+- **Scout:** crawl → wall-jump → lever gate → climb → climb to a lever that lowers a bridge → drop, crawl-walk, wall-jump → dash → mix.
+- **Warden:** push a block → lift & throw a crate onto a high switch → lever → smash → smash a wall hiding a lever → harmless crusher → brace → mix (smash, brace, push).
+- **Anchor:** plant in gusts → gaps timed between gusts → lever → slam through debris → slam onto a plate hidden under debris (drawbridge) → climb back up → plant on a plate in the wind → final slam.
+- **Weaver:** beam over a harmless trench → phantom bridges with a recharge island → beam a node → flare a node hidden behind its gate (beams stop at walls, flares don't) → lever bridge (a rest) → long bridges → mix.
 
 ### Implementation status
 All four roles are implemented in the **Ability Gym** (`js/levels/gym.js`), a developer test level with one station per ability. Keys 1–4 switch roles for testing. Not yet implemented: Weaver repel on threats (no threats exist yet), Anchor slam stun (no Tracers yet), Warden brace on doors (only crushers so far).
