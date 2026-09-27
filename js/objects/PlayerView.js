@@ -74,7 +74,7 @@ export class PlayerView {
       else if (air) { a1 = (off ? 0.5 : -0.2) * f; bend = 0.9; }
       else if (s.climb) { a1 = Math.sin(this.phase + off) * 0.35; bend = 0.6; }
       else { a1 = Math.sin(this.phase + off) * swing * f; bend = crouch ? 1.4 : Math.max(0, Math.cos(this.phase + off)) * swing * 1.1 + 0.08; }
-      const hipX = s.x + (off ? -1 : 1) * k.hip * 0.3;
+      const hipX = s.x + (off ? -1 : 1) * (k.hip * 0.5 + k.limb * 0.4); // spaced so both legs read
       const kx = hipX + Math.sin(a1) * legLen * 0.5, ky = hipY + Math.cos(a1) * legLen * 0.5;
       const a2 = a1 - bend * f;
       const fx = kx + Math.sin(a2) * legLen * 0.5, fy = Math.min(s.y, ky + Math.cos(a2) * legLen * 0.5);
@@ -88,6 +88,9 @@ export class PlayerView {
       { x: s.x - hw, y: hipY + 2 }, { x: s.x + hw, y: hipY + 2 },
       { x: torsoTopX + sw, y: torsoTopY + 2 }, { x: torsoTopX - sw, y: torsoTopY + 2 },
     ], true);
+    // round the silhouette: chest and hips as ellipses instead of hard corners
+    g.fillEllipse(torsoTopX, torsoTopY + 4, sw * 2.1, 9);
+    g.fillEllipse(s.x, hipY, hw * 2 + 2, 6);
     if (s.role === 'weaver') {                                     // cloak flaring behind while moving
       const flare = Math.min(1, speed / r.speed) * 10 + (air ? 6 : 0);
       g.fillTriangle(torsoTopX - f * 2, torsoTopY + 2, s.x - f * (6 + flare), s.y - 2, s.x + f * 4, hipY + 6);
@@ -130,7 +133,9 @@ export class PlayerView {
     g.fillStyle(INK, 1);
     if (role === 'warden' || role === 'weaver') {                 // hooded
       g.fillEllipse(x, y, R * 2.2, R * 2.3);
-      g.fillTriangle(x - f * R * 0.2, y - R * 1.1, x - f * R * 1.5, y - R * 0.2, x + f * R * 0.4, y - R * 0.6);
+      // pointed hood peak trailing back, plus a drape over the shoulders
+      g.fillTriangle(x - f * R * 0.1, y - R * 1.15, x - f * R * 2.1, y - R * 0.7, x + f * R * 0.3, y - R * 0.5);
+      g.fillTriangle(x - f * R * 1.1, y - R * 0.2, x + f * R * 0.6, y + R * 0.6, x - f * R * 1.3, y + R * 1.4);
     } else {
       g.fillEllipse(x, y, R * 2, R * 2.1);
     }
