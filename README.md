@@ -21,7 +21,7 @@ Developer only (test build):
 - **0** spawns a dummy teammate next to you (up to 3)
 - **Tab** switches which character you control (yours or a dummy), so two-player abilities can be tested alone
 - **9** unlocks every ability of the controlled character's role (abilities are normally earned from Code Fragments)
-- **8** toggles inspect mode (host): everything at half speed and the camera zoomed in 1.5×, to study animations
+- The game runs at **half speed** with the camera **zoomed in 1.5×** by default; **8** (host) toggles full speed at zoom 1
 
 ## Structure
 - `js/main.js`                  – lobby UI, networking setup, boots Phaser

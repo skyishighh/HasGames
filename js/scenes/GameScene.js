@@ -49,8 +49,8 @@ export class GameScene extends Phaser.Scene {
     // Developer mode: each client controls its own character or one of its dummies.
     this.control = new Map(); // host only: ownerId -> controlled sim id
     this.localControl = data.myId; // which character this client's camera follows
-    this.slowMo = 1;               // dev inspect mode (key 8): 0.5 = half speed
-    this.baseZoom = 1;             // normal camera zoom (1.5 in inspect mode)
+    this.slowMo = 0.5;             // game speed (0.5 = half speed); key 8 toggles full speed
+    this.baseZoom = 1.5;           // camera zoom (key 8 toggles 1)
   }
 
   preload() {
@@ -65,13 +65,15 @@ export class GameScene extends Phaser.Scene {
     this.atmosphere = new Atmosphere(this, this.level);
     this.backdrops = new Backdrops(this, this.levelData);
     this.scripted = new Scripted(this, this.levelData);
-    this.cameras.main.setBounds(0, 0, this.levelData.width, this.levelData.height);
+    this.cameras.main.setBounds(0, 0, this.levelData.width, this.levelData.height).setZoom(this.baseZoom);
+    this.tweens.timeScale = this.slowMo;
     this.beamGfx = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
     this.localInput = new LocalInput(this);
 
     if (isHost) {
       this.physics.world.gravity.y = GRAVITY;
       enableSubstepping(this.physics.world, this.sys.events);   // slow frames can't sink through floors
+      this.physics.world.slowMo = this.slowMo;
       this.physics.world.setBounds(0, 0, this.levelData.width, this.levelData.height + 200);
       this.physics.world.setBoundsCollision(true, true, true, false); // open bottom: pits
       this.playerGroup = this.physics.add.group();
@@ -264,13 +266,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Dev inspect mode (key 8, host only): everything runs at half speed and the camera zooms in 1.5×,
-   * so animations can be studied closely. Level timing and jump distances stay the same, just slower.
+   * Key 8 (host only): switch between the default view (half speed, camera zoomed in 1.5×) and full
+   * speed at zoom 1. Level timing and jump distances are the same either way, just faster or slower.
    */
   toggleInspect() {
-    const on = this.slowMo === 1;
-    this.slowMo = on ? 0.5 : 1;
-    this.baseZoom = on ? 1.5 : 1;
+    const slow = this.slowMo === 1;
+    this.slowMo = slow ? 0.5 : 1;
+    this.baseZoom = slow ? 1.5 : 1;
     this.physics.world.slowMo = this.slowMo;
     this.tweens.timeScale = this.slowMo;
     if (!this.scripted?.revealing) this.cameras.main.zoomTo(this.baseZoom, 300);

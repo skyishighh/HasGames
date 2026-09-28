@@ -9,6 +9,7 @@ import { ROLES } from '../roles.js';
 
 const INK = 0x050505;
 const SOFT_EDGE = 0.9;   // screen px: how far the soft rim extends past the silhouette
+const ANIM_RATE = 0.5;   // animation speed: 0.5 = legs cycle half as often per distance (longer, slower strides)
 
 // Proportions per role (px). leg + torso + head ≈ hitbox height. Widths are full widths.
 // limb: [thickness at the shoulder/hip, at the hand/foot].
@@ -153,16 +154,16 @@ export class PlayerView {
     const k = SHAPES[s.role] ?? SHAPES.scout, keys = KEYS[s.role];
     const run = Phaser.Math.Clamp((speed / r.speed - 1) / (1.45 - 1) + (s.sprint ? 0.5 : 0), 0, 1);  // 0 jog → 1 sprint
     // Advance the walk cycle by distance travelled, so feet don't slide at any fps.
-    if (s.climb) this.phase += climbed * (Math.PI * 2 / 40);
+    if (s.climb) this.phase += climbed * (Math.PI * 2 / 40) * ANIM_RATE;
     else if (!air && moved < 60) {
       const cycleLen = keys ? k.leg * 1.06 * (keys.walk.cycle + (keys.run.cycle - keys.walk.cycle) * run) : 55;
-      this.phase += moved * (Math.PI * 2 / cycleLen);
+      this.phase += moved * (Math.PI * 2 / cycleLen) * ANIM_RATE;
     }
 
     const pose = {
       k, f: s.facing === -1 ? -1 : 1, speed, air,
       crouch: !!s.crouch, swing: Math.min(1, speed / r.speed) * (s.sprint ? 0.95 : 0.7), maxSpeed: r.speed,
-      rising: air && this.vy < -60, time: now / 1000,
+      rising: air && this.vy < -60, time: now / 1000 * ANIM_RATE,   // breathing, hair, cloak ripple
       key: keys && !s.climb && !s.planted && !s.carry && !s.brace && !s.ride ? this.#keyPose(keys, s, speed / r.speed, run, air) : null,
     };
 
