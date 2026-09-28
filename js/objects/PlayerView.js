@@ -13,11 +13,27 @@ const SOFT_EDGE = 0.9;   // screen px: how far the soft rim extends past the sil
 // Proportions per role (px). leg + torso + head ≈ hitbox height. Widths are full widths.
 // limb: [thickness at the shoulder/hip, at the hand/foot].
 const SHAPES = {
-  scout:  { leg: 12, torso: 9,  headR: 7,   hipW: 7,  chestW: 8,  neckW: 4, arm: 10, legLimb: [3, 1.8],   armLimb: [2.4, 1.6] },
-  warden: { leg: 15, torso: 19, headR: 7,   hipW: 12, chestW: 20, neckW: 8, arm: 20, legLimb: [6, 4.5],   armLimb: [6, 4.5] },
-  weaver: { leg: 16, torso: 14, headR: 6.5, hipW: 8,  chestW: 10, neckW: 4, arm: 13, legLimb: [3, 2],     armLimb: [2.6, 1.8] },
+  scout:  { leg: 12, torso: 9,  headR: 7,   hipW: 7,  chestW: 8,  neckW: 4, arm: 10, legLimb: [2.8, 1.5],  armLimb: [2.1, 1.3] },
+  warden: { leg: 15, torso: 19, headR: 7,   hipW: 12, chestW: 20, neckW: 8, arm: 20, legLimb: [6, 3.8],   armLimb: [5.5, 3.2] },
+  weaver: { leg: 16, torso: 14, headR: 6.5, hipW: 8,  chestW: 10, neckW: 4, arm: 13, legLimb: [2.8, 1.6],  armLimb: [2.2, 1.4] },
   anchor: { leg: 14, torso: 16, headR: 7,   hipW: 13, chestW: 17, neckW: 7, arm: 14, legLimb: [5, 3.8],   armLimb: [4.6, 3.6] },
 };
+
+/**
+ * Two-bone IK: from joint A (hip/shoulder) towards target B, with bones l1 and l2, returns
+ * [middle joint x, y, end x, y]. bend (+1/-1) chooses which side the knee/elbow points to.
+ * An out-of-reach target is approached as far as the bones allow (limb straightens).
+ */
+function ik(ax, ay, bx, by, l1, l2, bend) {
+  let dx = bx - ax, dy = by - ay;
+  const dist = Math.hypot(dx, dy) || 0.001;
+  const d = Math.min(Math.max(dist, Math.abs(l1 - l2) + 0.01), (l1 + l2) * 0.999);
+  dx /= dist; dy /= dist;
+  const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  // perpendicular (+x when the limb points straight down, so bend = +1 → knee towards +x)
+  const px = -dy, py = dx;
+  return [ax + dx * a - px * h * bend, ay + dy * a - py * h * bend, ax + dx * d, ay + dy * d];
+}
 
 export class PlayerView {
   constructor(scene, name, isLocal) {
@@ -95,8 +111,12 @@ export class PlayerView {
     // --- skeleton (squash on landing, stretch while rising, breathing when idle) ---
     const squash = 1 - 0.2 * this.land, stretch = p.rising ? 1.07 : 1;
     const breath = !air && p.speed < 10 ? Math.sin(p.time * 2.2) * 0.5 : 0;
-    const legLen = k.leg * (crouch ? 0.55 : 1) * (1 - 0.12 * this.land);
-    const hipX = s.x, hipY = s.y - legLen - (air ? 2 : 0);
+    // Legs are two fixed-length bones; the hip height sets how much the knees bend (IK below).
+    const thigh = k.leg * 0.53, shin = k.leg * 0.53;
+    const bob = !air && !s.climb && !s.planted ? -Math.abs(Math.sin(this.phase)) * 1.2 * swing : 0;   // rise at passing
+    const hipH = k.leg * (crouch ? 0.6 : s.planted ? 0.84 : 0.95) * (1 - 0.14 * this.land);
+    const legLen = hipH;
+    const hipX = s.x, hipY = s.y - hipH - (air ? 2 : 0) + bob;
     const lean = crouch ? 0.9 : Math.min(0.35, p.speed / p.maxSpeed * 0.25) + (s.dash ? 0.5 : 0);
     const torsoH = k.torso * (crouch ? 0.6 : 1) * squash * stretch;
     const neckX = hipX + f * lean * torsoH * 0.7, neckY = hipY - torsoH + breath;
@@ -108,45 +128,62 @@ export class PlayerView {
     if (s.role === 'weaver') this.#cloak(g, s, p, hipX, hipY, neckX, neckY);
     if (s.role === 'anchor' && !s.planted) this.#anchorOnBack(g, neckX, neckY, hipY, f);
 
-    // --- legs ---
+    // --- legs: pick where each foot is, IK finds the knee (always bending forward) ---
+    const heavy = s.role === 'warden' || s.role === 'anchor';
+    const footL = k.legLimb[1] * (heavy ? 2.6 : 2.3);
     for (const off of [0, Math.PI]) {
-      let a1, bend;
-      if (s.planted) { a1 = (off ? -1 : 1) * 0.5; bend = 0.2; }
-      else if (air) { a1 = (off ? 0.55 : -0.25) * f; bend = p.rising ? 1.1 : 0.7; }
-      else if (s.climb) { a1 = Math.sin(this.phase + off) * 0.35; bend = 0.6; }
-      else { a1 = Math.sin(this.phase + off) * swing * f; bend = crouch ? 1.4 : Math.max(0, Math.cos(this.phase + off)) * swing * 1.1 + 0.1; }
-      const hx = hipX + (off ? -1 : 1) * k.hipW * 0.22;
-      const kx = hx + Math.sin(a1) * legLen * 0.5, ky = hipY + Math.cos(a1) * legLen * 0.5;
-      const a2 = a1 - bend * f;
-      const fx = kx + Math.sin(a2) * legLen * 0.5, fy = Math.min(s.y, ky + Math.cos(a2) * legLen * 0.5);
-      this.#limb(g, [[hx, hipY], [kx, ky], [fx, fy]], k.legLimb);
-      if (s.role === 'warden' || s.role === 'anchor') g.fillEllipse(fx + f * 2, fy - 1.2, k.legLimb[1] * 2.4, k.legLimb[1] * 1.3); // boots
-      else g.fillEllipse(fx + f * 1.2, fy - 0.8, k.legLimb[1] * 2.2, k.legLimb[1] * 1.1);                                          // small feet
+      const hx = hipX + (off ? -1 : 1) * k.hipW * 0.2;
+      const ph = this.phase + off;
+      let ax, ay, toe;                                   // ankle target, toe angle (0 = flat, + = toes down)
+      if (s.planted) { ax = hx + (off ? -1 : 1) * f * legLen * 0.55; ay = s.y; toe = 0; }
+      else if (air) {
+        ax = hx + (off ? -0.35 : 0.3) * f * legLen; ay = hipY + legLen * (p.rising ? 0.55 : 0.8) + (off ? 1 : -2);
+        toe = 0.6;
+      } else if (s.climb) { ax = hx; ay = s.y - Math.max(0, Math.sin(ph)) * legLen * 0.45; toe = 0.4; }
+      else {
+        // walk cycle: forward swing with the foot lifted, then the planted foot slides back
+        const stride = legLen * (s.sprint ? 0.75 : 0.55) * (swing > 0.05 ? 1 : 0);
+        const lift = Math.max(0, Math.cos(ph)) * legLen * (s.sprint ? 0.45 : 0.3) * Math.min(1, swing * 1.6);
+        ax = hx + Math.sin(ph) * stride * f; ay = s.y - lift;
+        toe = lift > 1 ? 0.25 + Math.sin(ph) * 0.35 : 0;     // heel-strike / toe-off
+      }
+      ay = Math.min(ay, s.y);
+      const [kx, ky, ex, ey] = ik(hx, hipY, ax, ay, thigh, shin, f);            // knees point forward
+      this.#limb(g, [[hx, hipY], [kx, ky], [ex, ey]], [k.legLimb[0], k.legLimb[1]]);
+      // foot: from the ankle forward; flat on the ground, tipped when lifted
+      const tx = ex + Math.cos(toe) * footL * f, ty = Math.min(s.y, ey + Math.sin(toe) * footL);
+      this.#limb(g, [[ex, ey], [tx, ty]], [k.legLimb[1] * (heavy ? 1.15 : 1.2), k.legLimb[1] * (heavy ? 1.0 : 0.9)]);
     }
 
     // --- body: a smooth bean from the hips to the neck ---
     this.#bean(g, hipX, hipY + 1, neckX, neckY, k.hipW * widen, k.chestW * widen, k.neckW);
 
-    // --- arms (the far arm first, drawn a touch thinner) ---
+    // --- arms: pick where the hand is, IK finds the elbow (the far arm first, a touch thinner) ---
     const shY = neckY + torsoH * 0.12;
+    const upper = k.arm * 0.52, fore = k.arm * 0.52;
     for (const side of [-f, f]) {
-      const shX = neckX + side * k.chestW * 0.34;
-      let hx, hy;
-      if (s.brace || s.carry) { hx = shX + side * 2; hy = shY - k.arm * 0.95; }                       // arms up
-      else if (s.climb) { const up = Math.sin(this.phase + (side > 0 ? 0 : Math.PI)); hx = shX; hy = shY - k.arm * (0.6 + 0.4 * up); }
-      else if (Array.isArray(s.beam) && side === f) {                                                 // point along the beam
+      const shX = neckX + side * k.chestW * 0.3;
+      let hx, hy, elbow = -f;                                 // elbows point backwards by default
+      if (s.brace || s.carry) { hx = shX + side * 3; hy = shY - k.arm * 0.9; elbow = side; }            // arms up, elbows out
+      else if (s.climb) { const up = Math.sin(this.phase + (side > 0 ? 0 : Math.PI)); hx = shX + f * 2; hy = shY - k.arm * (0.45 + 0.4 * up); elbow = side; }
+      else if (Array.isArray(s.beam) && side === f) {                                                   // reach along the beam
         const [, , bx, by] = s.beam; const a = Math.atan2(by - shY, bx - shX);
-        hx = shX + Math.cos(a) * k.arm; hy = shY + Math.sin(a) * k.arm;
-      } else if (air) { hx = shX + side * k.arm * 0.45; hy = shY - k.arm * (p.rising ? 0.55 : 0.2); }
+        hx = shX + Math.cos(a) * k.arm * 0.97; hy = shY + Math.sin(a) * k.arm * 0.97;
+      } else if (air) { hx = shX + side * k.arm * 0.4; hy = shY - k.arm * (p.rising ? 0.55 : 0.1); elbow = side; }
       else {
+        // swing opposite to the legs; the forward arm bends more (a sprint pumps hard at the elbow)
         const a = Math.sin(this.phase + (side === f ? Math.PI : 0)) * swing * 0.9 + (s.role === 'warden' ? 0.08 * f : 0);
-        hx = shX + Math.sin(a) * k.arm * f; hy = shY + Math.cos(a) * k.arm * (crouch ? 0.7 : 1);
+        const reach = k.arm * (0.9 - (a * f > 0 ? a * f * (s.sprint ? 0.5 : 0.3) : 0)) * (crouch ? 0.8 : 1);
+        hx = shX + Math.sin(a) * reach * f; hy = shY + Math.cos(a) * reach;
       }
-      const ex = (shX + hx) / 2 + side * 1.2, ey = (shY + hy) / 2 + 1.5;
+      const [ex, ey, wx, wy] = ik(shX, shY, hx, hy, upper, fore, elbow);
       const far = side !== f ? 0.85 : 1;
-      this.#limb(g, [[shX, shY], [ex, ey], [hx, hy]], [k.armLimb[0] * far, k.armLimb[1] * far]);
-      if (s.role === 'warden') g.fillCircle(hx, hy + 1, k.armLimb[1] * 0.75);                          // heavy fists
-      if (s.role === 'weaver' && (!s.ab || s.ab.includes('beam'))) this.#glowHand(g, hx, hy, s.energy);
+      this.#limb(g, [[shX, shY], [ex, ey], [wx, wy]], [k.armLimb[0] * far, k.armLimb[1] * far]);
+      // hand: a small shape continuing past the wrist
+      const hl = Math.hypot(wx - ex, wy - ey) || 1, dxh = (wx - ex) / hl, dyh = (wy - ey) / hl;
+      const handR = k.armLimb[1] * (s.role === 'warden' ? 0.72 : 0.62);
+      g.fillCircle(wx + dxh * handR * 0.9, wy + dyh * handR * 0.9, handR);
+      if (s.role === 'weaver' && (!s.ab || s.ab.includes('beam'))) this.#glowHand(g, wx + dxh * handR, wy + dyh * handR, s.energy);
     }
 
     // --- head and role features ---
