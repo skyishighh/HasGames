@@ -13,7 +13,7 @@ const SOFT_EDGE = 0.9;   // screen px: how far the soft rim extends past the sil
 // Proportions per role (px). leg + torso + head ≈ hitbox height. Widths are full widths.
 // limb: [thickness at the shoulder/hip, at the hand/foot].
 const SHAPES = {
-  scout:  { leg: 12, torso: 9,  headR: 7,   hipW: 7,  chestW: 8,  neckW: 4, arm: 10, legLimb: [2.8, 1.5],  armLimb: [2.1, 1.3] },
+  scout:  { leg: 15, torso: 8,  headR: 6,   hipW: 7,  chestW: 8,  neckW: 4, arm: 10, legLimb: [2.8, 1.5],  armLimb: [2.1, 1.3] },
   warden: { leg: 15, torso: 19, headR: 7,   hipW: 12, chestW: 20, neckW: 8, arm: 20, legLimb: [6, 3.8],   armLimb: [5.5, 3.2] },
   weaver: { leg: 16, torso: 14, headR: 6.5, hipW: 8,  chestW: 10, neckW: 4, arm: 13, legLimb: [2.8, 1.6],  armLimb: [2.2, 1.4] },
   anchor: { leg: 14, torso: 16, headR: 7,   hipW: 13, chestW: 17, neckW: 7, arm: 14, legLimb: [5, 3.8],   armLimb: [4.6, 3.6] },
@@ -33,6 +33,75 @@ function ik(ax, ay, bx, by, l1, l2, bend) {
   // perpendicular (+x when the limb points straight down, so bend = +1 → knee towards +x)
   const px = -dy, py = dx;
   return [ax + dx * a - px * h * bend, ay + dy * a - py * h * bend, ax + dx * d, ay + dy * d];
+}
+
+// ---------------------------------------------------------------------------------------- key poses
+// Poses copied from the pose sheets in docs/reference/poses/ (drawn facing right, then mirrored).
+// Units: L = full leg length (hip to ankle), A = full arm length.
+//   hip   : hip height above the feet (in L)          lean : torso tilt forward (radians)
+//   legs  : [x fwd, y, toe] per leg — y is the lift above the ground (ground poses) or the drop
+//           below the hip (air poses); toe: 0 flat, + toes pointing down
+//   arms  : [x fwd, y down, elbow] per arm, hand position from the shoulder; elbow -1 back, +1 fwd
+// Walk and run are cycles of four keys (contact, passing, contact, passing) per leg; the other leg
+// is half a cycle behind. "cycle" = distance travelled per full cycle (in L), so feet never slide.
+const KEYS = {
+  scout: {
+    idle:    { hip: 0.97, lean: 0.03, ground: true, legs: [[0.08, 0, 0], [-0.05, 0, 0]], arms: [[-0.03, 0.97, -1], [0.04, 0.97, -1]] },
+    walk: {
+      cycle: 1.68, lean: 0.12, hip: [0.92, 0.98],               // hip height at contact, at passing
+      leg: [[0, [0.42, 0, -0.25]], [0.25, [0.0, 0, 0]], [0.5, [-0.42, 0, 0.45]], [0.75, [-0.02, 0.42, 0.75]]],
+      arm: [[0, [-0.32, 0.92, -1]], [0.5, [0.3, 0.88, -1]]],   // arm is back when its own-side leg is forward
+    },
+    run: {
+      cycle: 2.0, lean: 0.38, hip: [0.86, 0.95],
+      leg: [[0, [0.5, 0, -0.3]], [0.25, [0.02, 0, 0]], [0.5, [-0.58, 0.28, 0.95]], [0.75, [0.25, 0.55, 0.5]]],
+      arm: [[0, [-0.42, 0.38, -1]], [0.5, [0.38, 0.18, -1]]],   // elbows bent ~90°, pumping
+    },
+    rise:    { hip: 0.9, lean: 0.3, legs: [[0.28, 0.55, 0.6], [-0.45, 0.72, 0.95]], arms: [[-0.5, 0.55, -1], [-0.4, 0.62, -1]] },
+    fall:    { hip: 0.98, lean: -0.04, legs: [[0.06, 0.96, 0.9], [-0.1, 0.93, 0.9]], arms: [[-0.45, 0.5, -1], [0.5, 0.45, -1]] },
+    land:    { hip: 0.48, lean: 0.62, ground: true, legs: [[0.24, 0, 0], [-0.2, 0, 0.35]], arms: [[0.45, 0.85, -1], [0.62, 0.78, -1]] },
+    crouch:  { hip: 0.42, lean: 0.5, ground: true, legs: [[0.2, 0, 0], [-0.14, 0, 0.45]], arms: [[0.32, 0.85, -1], [0.42, 0.8, -1]] },
+  },
+};
+
+/** A pose with ground lifts converted to "drop below the hip", ready to blend. */
+function resolve(p) {
+  return {
+    hip: p.hip, lean: p.lean,
+    legs: p.legs.map(([x, y, t]) => [x, p.ground ? p.hip - y : y, t]),
+    arms: p.arms.map((a) => [...a]),
+  };
+}
+
+function mix(a, b, t) {
+  if (t <= 0) return a;
+  if (t >= 1) return b;
+  const l = (u, v) => u + (v - u) * t;
+  const m = (p, q) => p.map((v, i) => l(v, q[i]));
+  return { hip: l(a.hip, b.hip), lean: l(a.lean, b.lean), legs: a.legs.map((v, i) => m(v, b.legs[i])), arms: a.arms.map((v, i) => m(v, b.arms[i])) };
+}
+
+/** Value of a looping key track at t (0..1), smoothly interpolated. */
+function track(keys, t) {
+  t = ((t % 1) + 1) % 1;
+  for (let i = 0; i < keys.length; i++) {
+    const [t0, v0] = keys[i], [t1raw, v1] = keys[(i + 1) % keys.length];
+    const t1 = i + 1 < keys.length ? t1raw : 1;
+    if (t >= t0 && t <= t1) {
+      const u = (t - t0) / (t1 - t0), e = u * u * (3 - 2 * u);        // smoothstep between keys
+      return v0.map((v, j) => v + (v1[j] - v) * e);
+    }
+  }
+  return keys[0][1];
+}
+
+/** Walk/run cycle pose at phase t (0..1). */
+function cyclePose(c, t) {
+  const bob = Math.abs(Math.sin(t * Math.PI * 2));                   // 0 at contact, 1 at passing
+  const hip = c.hip[0] + (c.hip[1] - c.hip[0]) * bob;
+  const legs = [track(c.leg, t), track(c.leg, t + 0.5)].map(([x, y, toe]) => [x, hip - y, toe]);
+  // near arm swings with the far leg and vice versa
+  return { hip, lean: c.lean, legs, arms: [track(c.arm, t), track(c.arm, t + 0.5)] };
 }
 
 export class PlayerView {
@@ -81,14 +150,20 @@ export class PlayerView {
     const trailTarget = Phaser.Math.Clamp(-this.vx * 0.03, -9, 9);
     this.trail += (trailTarget - this.trail) * Math.min(1, dt * 8);
 
-    // Advance the walk cycle by distance travelled (one stride ≈ 55 px), so feet don't slide at any fps.
+    const k = SHAPES[s.role] ?? SHAPES.scout, keys = KEYS[s.role];
+    const run = Phaser.Math.Clamp((speed / r.speed - 1) / (1.45 - 1) + (s.sprint ? 0.5 : 0), 0, 1);  // 0 jog → 1 sprint
+    // Advance the walk cycle by distance travelled, so feet don't slide at any fps.
     if (s.climb) this.phase += climbed * (Math.PI * 2 / 40);
-    else if (!air && moved < 60) this.phase += moved * (Math.PI * 2 / 55);
+    else if (!air && moved < 60) {
+      const cycleLen = keys ? k.leg * 1.06 * (keys.walk.cycle + (keys.run.cycle - keys.walk.cycle) * run) : 55;
+      this.phase += moved * (Math.PI * 2 / cycleLen);
+    }
 
     const pose = {
-      k: SHAPES[s.role] ?? SHAPES.scout, f: s.facing === -1 ? -1 : 1, speed, air,
+      k, f: s.facing === -1 ? -1 : 1, speed, air,
       crouch: !!s.crouch, swing: Math.min(1, speed / r.speed) * (s.sprint ? 0.95 : 0.7), maxSpeed: r.speed,
       rising: air && this.vy < -60, time: now / 1000,
+      key: keys && !s.climb && !s.planted && !s.carry && !s.brace && !s.ride ? this.#keyPose(keys, s, speed / r.speed, run, air) : null,
     };
 
     // Soft edge (Limbo's play layer is never razor-sharp): the figure is drawn 4 extra times, shifted
@@ -101,6 +176,21 @@ export class PlayerView {
     let top = s.y;
     for (const [g, dx, dy] of passes) top = this.#drawFigure(g, dx || dy ? { ...s, x: s.x + dx, y: s.y + dy } : s, pose);
     this.label.setPosition(s.x, top - 6);
+  }
+
+  /** Blend the role's key poses for the current state (movement, air, landing, crouch). */
+  #keyPose(keys, s, speedFrac, run, air) {
+    let p;
+    if (air) p = mix(resolve(keys.rise), resolve(keys.fall), Phaser.Math.Clamp((this.vy + 150) / 400, 0, 1));
+    else {
+      const t = this.phase / (Math.PI * 2);
+      const moving = mix(cyclePose(keys.walk, t), cyclePose(keys.run, t), run);
+      p = mix(resolve(keys.idle), moving, Phaser.Math.Clamp(speedFrac * 3, 0, 1));
+      if (s.crouch) p = resolve(keys.crouch);
+      p = mix(p, resolve(keys.land), this.land * 0.9);                // absorb the landing
+    }
+    if (s.dash) p = { ...p, lean: p.lean + 0.4 };
+    return p;
   }
 
   /** Draws one full figure; returns the y of the top of the head (for the name label). */
@@ -116,10 +206,12 @@ export class PlayerView {
     const bob = !air && !s.climb && !s.planted ? -Math.abs(Math.sin(this.phase)) * 1.2 * swing : 0;   // rise at passing
     const hipH = k.leg * (crouch ? 0.6 : s.planted ? 0.84 : 0.95) * (1 - 0.14 * this.land);
     const legLen = hipH;
-    const hipX = s.x, hipY = s.y - hipH - (air ? 2 : 0) + bob;
+    const K = p.key, L = thigh + shin;
+    const hipX = s.x, hipY = K ? s.y - K.hip * L : s.y - hipH - (air ? 2 : 0) + bob;
     const lean = crouch ? 0.9 : Math.min(0.35, p.speed / p.maxSpeed * 0.25) + (s.dash ? 0.5 : 0);
-    const torsoH = k.torso * (crouch ? 0.6 : 1) * squash * stretch;
-    const neckX = hipX + f * lean * torsoH * 0.7, neckY = hipY - torsoH + breath;
+    const torsoH = k.torso * (crouch && !K ? 0.6 : 1) * (K ? 1 : squash) * stretch;
+    const neckX = K ? hipX + f * Math.sin(K.lean) * torsoH : hipX + f * lean * torsoH * 0.7;
+    const neckY = K ? hipY - Math.cos(K.lean) * torsoH + breath : hipY - torsoH + breath;
     const R = k.headR;
     const headX = neckX + f * (crouch ? 3 : 1), headY = neckY - R * 0.85;
     const widen = 1 + 0.12 * this.land;
@@ -135,7 +227,8 @@ export class PlayerView {
       const hx = hipX + (off ? -1 : 1) * k.hipW * 0.2;
       const ph = this.phase + off;
       let ax, ay, toe;                                   // ankle target, toe angle (0 = flat, + = toes down)
-      if (s.planted) { ax = hx + (off ? -1 : 1) * f * legLen * 0.55; ay = s.y; toe = 0; }
+      if (K) { const [x, y, t] = K.legs[off ? 1 : 0]; ax = hx + f * x * L; ay = hipY + y * L; toe = t; }
+      else if (s.planted) { ax = hx + (off ? -1 : 1) * f * legLen * 0.55; ay = s.y; toe = 0; }
       else if (air) {
         ax = hx + (off ? -0.35 : 0.3) * f * legLen; ay = hipY + legLen * (p.rising ? 0.55 : 0.8) + (off ? 1 : -2);
         toe = 0.6;
@@ -164,7 +257,11 @@ export class PlayerView {
     for (const side of [-f, f]) {
       const shX = neckX + side * k.chestW * 0.3;
       let hx, hy, elbow = -f;                                 // elbows point backwards by default
-      if (s.brace || s.carry) { hx = shX + side * 3; hy = shY - k.arm * 0.9; elbow = side; }            // arms up, elbows out
+      const beamArm = Array.isArray(s.beam) && side === f;
+      if (K && !beamArm) {
+        const [x, y, e] = K.arms[side === f ? 1 : 0];
+        hx = shX + f * x * (upper + fore); hy = shY + y * (upper + fore); elbow = (e < 0 ? -1 : 1) * f;
+      } else if (s.brace || s.carry) { hx = shX + side * 3; hy = shY - k.arm * 0.9; elbow = side; }            // arms up, elbows out
       else if (s.climb) { const up = Math.sin(this.phase + (side > 0 ? 0 : Math.PI)); hx = shX + f * 2; hy = shY - k.arm * (0.45 + 0.4 * up); elbow = side; }
       else if (Array.isArray(s.beam) && side === f) {                                                   // reach along the beam
         const [, , bx, by] = s.beam; const a = Math.atan2(by - shY, bx - shX);
@@ -273,9 +370,9 @@ export class PlayerView {
     const pts = [];
     for (let i = 0; i <= 4; i++) {
       const u = i / 4;
-      pts.push([sx - f * u * 7 + trail * u * 0.9, sy + u * 3 + Math.sin(t * 9 - u * 4) * u * 1.4]);
+      pts.push([sx - f * u * 4 + trail * u * 0.45, sy + u * 6 + Math.sin(t * 9 - u * 4) * u * 0.9]);   // short, droops down the back
     }
-    this.#limb(g, pts, [3, 1.4]);
+    this.#limb(g, pts, [2.6, 1.2]);
   }
 
   /** Weaver: long cloak from the shoulders to near the feet; the hem ripples and trails behind. */
