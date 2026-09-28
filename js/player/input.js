@@ -2,7 +2,7 @@
 export class LocalInput {
   constructor(scene) {
     this.keys = scene.input.keyboard.addKeys(
-      'A,D,W,S,E,J,K,SPACE,SHIFT,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR,ZERO,TAB,NINE');
+      'A,D,W,S,E,J,K,SPACE,SHIFT,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR,ZERO,TAB,NINE,EIGHT');
   }
 
   read() {
@@ -28,6 +28,7 @@ export class LocalInput {
    *  0   → { spawn: true }   spawn a dummy teammate
    *  Tab → { cycle: true }   switch control between your character and your dummies
    *  9   → { unlockAll: true } give the controlled character every ability of its role
+   *  8   → { inspect: true }   toggle inspect mode: half-speed slow motion + 1.5× camera zoom
    */
   devAction() {
     const k = this.keys;
@@ -37,6 +38,7 @@ export class LocalInput {
     if (J(k.ZERO)) return { spawn: true };
     if (J(k.TAB)) return { cycle: true };
     if (J(k.NINE)) return { unlockAll: true };
+    if (J(k.EIGHT)) return { inspect: true };
     return null;
   }
 }

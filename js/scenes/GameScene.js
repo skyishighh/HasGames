@@ -49,6 +49,8 @@ export class GameScene extends Phaser.Scene {
     // Developer mode: each client controls its own character or one of its dummies.
     this.control = new Map(); // host only: ownerId -> controlled sim id
     this.localControl = data.myId; // which character this client's camera follows
+    this.slowMo = 1;               // dev inspect mode (key 8): 0.5 = half speed
+    this.baseZoom = 1;             // normal camera zoom (1.5 in inspect mode)
   }
 
   preload() {
@@ -261,6 +263,19 @@ export class GameScene extends Phaser.Scene {
     this.followLocal();
   }
 
+  /**
+   * Dev inspect mode (key 8, host only): everything runs at half speed and the camera zooms in 1.5×,
+   * so animations can be studied closely. Level timing and jump distances stay the same, just slower.
+   */
+  toggleInspect() {
+    const on = this.slowMo === 1;
+    this.slowMo = on ? 0.5 : 1;
+    this.baseZoom = on ? 1.5 : 1;
+    this.physics.world.slowMo = this.slowMo;
+    this.tweens.timeScale = this.slowMo;
+    if (!this.scripted?.revealing) this.cameras.main.zoomTo(this.baseZoom, 300);
+  }
+
   /** (Re)attach the camera to the locally controlled character, unless a scripted camera move is running. */
   followLocal() {
     const view = this.views.get(this.localControl);
@@ -285,8 +300,9 @@ export class GameScene extends Phaser.Scene {
       if (dev?.spawn) this.devSpawn(this.myId);
       if (dev?.cycle) this.setLocalControl(this.devCycle(this.myId));
       if (dev?.unlockAll) this.devUnlockAll(this.myId);
+      if (dev?.inspect) this.toggleInspect();
       this.setInput(this.myId, input);
-      this.#stepHost(time / 1000, deltaMs / 1000);
+      this.#stepHost(time / 1000, (deltaMs / 1000) * this.slowMo);
     } else {
       if (dev?.role !== undefined) this.net.send({ t: 'role', role: ROLE_ORDER[dev.role] });
       if (dev?.spawn) this.net.send({ t: 'dev', action: 'spawn' });

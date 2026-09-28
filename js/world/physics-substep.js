@@ -21,6 +21,7 @@ export function enableSubstepping(world, sceneEvents) {
   sceneEvents.off(Phaser.Scenes.Events.UPDATE, world.update, world);
   world.update = function update(time, delta) {
     if (this.isPaused || this.bodies.size === 0) return;
+    delta *= this.slowMo ?? 1;                          // dev inspect mode: slow motion
 
     const steps = Math.min(MAX_SUBSTEPS, Math.max(1, Math.ceil(delta / MAX_STEP_MS)));
     const dt = (delta / steps) * 0.001;

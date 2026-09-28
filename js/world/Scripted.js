@@ -85,7 +85,7 @@ export class Scripted {
     cam.pan(r.x, r.y, REVEAL_IN_MS, 'Sine.easeInOut');
     cam.zoomTo(r.zoom, REVEAL_IN_MS, 'Sine.easeInOut');
     this.scene.time.delayedCall(REVEAL_IN_MS + REVEAL_HOLD_MS, () => {
-      cam.zoomTo(1, REVEAL_OUT_MS, 'Sine.easeInOut');
+      cam.zoomTo(this.scene.baseZoom ?? 1, REVEAL_OUT_MS, 'Sine.easeInOut');
       this.scene.time.delayedCall(REVEAL_OUT_MS * 0.4, () => {
         this.revealing = false;
         this.scene.followLocal();
