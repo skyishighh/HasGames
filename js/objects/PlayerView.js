@@ -9,7 +9,7 @@ import { ROLES } from '../roles.js';
 
 const INK = 0x050505;
 const SOFT_EDGE = 0.9;   // screen px: how far the soft rim extends past the silhouette
-const ANIM_RATE = 0.5;   // animation speed: 0.5 = legs cycle half as often per distance (longer, slower strides)
+const ANIM_RATE = 0.6;   // animation speed: < 1 = legs cycle less often per distance (slower, calmer cadence)
 
 // Proportions per role (px). leg + torso + head ≈ hitbox height. Widths are full widths.
 // limb: [thickness at the shoulder/hip, at the hand/foot].
@@ -48,19 +48,28 @@ function ik(ax, ay, bx, by, l1, l2, bend) {
 const KEYS = {
   scout: {
     idle:    { hip: 0.97, lean: 0.03, ground: true, legs: [[0.08, 0, 0], [-0.05, 0, 0]], arms: [[-0.03, 0.97, -1], [0.04, 0.97, -1]] },
+    // Default movement is a JOG: bouncy, arms bent ~90°, a little lean, a short flight phase
+    // (both feet off the ground between steps: the ground phase covers only 0–0.4 of each leg's cycle).
     walk: {
-      cycle: 1.68, lean: 0.12, hip: [0.92, 0.98],               // hip height at contact, at passing
-      leg: [[0, [0.42, 0, -0.25]], [0.25, [0.0, 0, 0]], [0.5, [-0.42, 0, 0.45]], [0.75, [-0.02, 0.42, 0.75]]],
-      arm: [[0, [-0.32, 0.92, -1]], [0.5, [0.3, 0.88, -1]]],   // arm is back when its own-side leg is forward
+      cycle: 2.0, lean: 0.2, hip: [0.88, 0.99],
+      leg: [[0, [0.42, 0, -0.2]], [0.2, [0.05, 0, 0]], [0.4, [-0.38, 0.04, 0.7]], [0.65, [-0.3, 0.38, 1.1]], [0.85, [0.28, 0.3, 0.4]]],
+      arm: [[0, [-0.3, 0.52, -1]], [0.5, [0.32, 0.42, -1]]],
     },
+    // SPRINT: strong lean, long strides, heels kick up high, big arm pumps up to the face.
     run: {
-      cycle: 2.0, lean: 0.38, hip: [0.86, 0.95],
-      leg: [[0, [0.5, 0, -0.3]], [0.25, [0.02, 0, 0]], [0.5, [-0.58, 0.28, 0.95]], [0.75, [0.25, 0.55, 0.5]]],
-      arm: [[0, [-0.42, 0.38, -1]], [0.5, [0.38, 0.18, -1]]],   // elbows bent ~90°, pumping
+      cycle: 3.1, lean: 0.48, hip: [0.84, 0.97],
+      leg: [[0, [0.55, 0, -0.3]], [0.18, [0.05, 0, 0]], [0.35, [-0.55, 0.08, 0.85]], [0.6, [-0.35, 0.62, 1.35]], [0.82, [0.45, 0.5, 0.5]]],
+      arm: [[0, [-0.5, 0.42, -1]], [0.5, [0.45, 0.12, -1]]],
     },
-    rise:    { hip: 0.9, lean: 0.3, legs: [[0.28, 0.55, 0.6], [-0.45, 0.72, 0.95]], arms: [[-0.5, 0.55, -1], [-0.4, 0.62, -1]] },
-    fall:    { hip: 0.98, lean: -0.04, legs: [[0.06, 0.96, 0.9], [-0.1, 0.93, 0.9]], arms: [[-0.45, 0.5, -1], [0.5, 0.45, -1]] },
-    land:    { hip: 0.48, lean: 0.62, ground: true, legs: [[0.24, 0, 0], [-0.2, 0, 0.35]], arms: [[0.45, 0.85, -1], [0.62, 0.78, -1]] },
+    // CROUCH-WALK: low, short steps.
+    crouchWalk: {
+      cycle: 0.9, lean: 0.5, hip: [0.43, 0.47],
+      leg: [[0, [0.25, 0, 0]], [0.5, [-0.2, 0, 0.3]], [0.75, [0.02, 0.16, 0.4]]],
+      arm: [[0, [0.25, 0.85, -1]], [0.5, [0.38, 0.8, -1]]],
+    },
+    rise:    { hip: 0.93, lean: 0.18, legs: [[0.2, 0.68, 0.45], [-0.28, 0.8, 0.8]], arms: [[-0.35, 0.65, -1], [0.2, 0.7, -1]] },
+    fall:    { hip: 0.98, lean: -0.03, legs: [[0.06, 0.95, 0.8], [-0.08, 0.93, 0.8]], arms: [[-0.4, 0.55, -1], [0.42, 0.52, -1]] },
+    land:    { hip: 0.6, lean: 0.45, ground: true, legs: [[0.22, 0, 0], [-0.18, 0, 0.3]], arms: [[0.35, 0.8, -1], [0.5, 0.75, -1]] },
     crouch:  { hip: 0.42, lean: 0.5, ground: true, legs: [[0.2, 0, 0], [-0.14, 0, 0.45]], arms: [[0.32, 0.85, -1], [0.42, 0.8, -1]] },
   },
 };
@@ -154,11 +163,15 @@ export class PlayerView {
     this.trail += (trailTarget - this.trail) * Math.min(1, dt * 8);
 
     const k = SHAPES[s.role] ?? SHAPES.scout, keys = KEYS[s.role];
-    const run = Phaser.Math.Clamp((speed / r.speed - 1) / (1.45 - 1) + (s.sprint ? 0.5 : 0), 0, 1);  // 0 jog → 1 sprint
+    // 0 jog → 1 sprint: follows the sprint key (smoothly), not the measured speed, which the
+    // game-speed setting scales.
+    this.runT = (this.runT ?? 0) + ((s.sprint && speed > 5 ? 1 : 0) - (this.runT ?? 0)) * Math.min(1, dt * 6);
+    const run = this.runT;
     // Advance the walk cycle by distance travelled, so feet don't slide at any fps.
     if (s.climb) this.phase += climbed * (Math.PI * 2 / 40) * ANIM_RATE;
     else if (!air && moved < 60) {
-      const cycleLen = keys ? k.leg * 1.06 * (keys.walk.cycle + (keys.run.cycle - keys.walk.cycle) * run) : 55;
+      const cyc = !keys ? 0 : s.crouch ? keys.crouchWalk.cycle : keys.walk.cycle + (keys.run.cycle - keys.walk.cycle) * run;
+      const cycleLen = keys ? k.leg * 1.06 * cyc : 55;
       this.phase += moved * (Math.PI * 2 / cycleLen) * ANIM_RATE;
     }
 
@@ -187,10 +200,10 @@ export class PlayerView {
     if (air) p = mix(resolve(keys.rise), resolve(keys.fall), Phaser.Math.Clamp((this.vy + 150) / 400, 0, 1));
     else {
       const t = this.phase / (Math.PI * 2);
-      const moving = mix(cyclePose(keys.walk, t), cyclePose(keys.run, t), run);
-      p = mix(resolve(keys.idle), moving, Phaser.Math.Clamp(speedFrac * 3, 0, 1));
-      if (s.crouch) p = resolve(keys.crouch);
-      p = mix(p, resolve(keys.land), this.land * 0.9);                // absorb the landing
+      const move = Phaser.Math.Clamp(speedFrac * 6, 0, 1);            // any real movement → full cycle
+      if (s.crouch) p = mix(resolve(keys.crouch), cyclePose(keys.crouchWalk, t), move);
+      else p = mix(resolve(keys.idle), mix(cyclePose(keys.walk, t), cyclePose(keys.run, t), run), move);
+      p = mix(p, resolve(keys.land), this.land * 0.6);                // absorb the landing (softly)
     }
     if (s.dash) p = { ...p, lean: p.lean + 0.4 };
     return p;
@@ -202,7 +215,7 @@ export class PlayerView {
     g.fillStyle(INK, 1);
 
     // --- skeleton (squash on landing, stretch while rising, breathing when idle) ---
-    const squash = 1 - 0.2 * this.land, stretch = p.rising ? 1.07 : 1;
+    const squash = 1 - 0.2 * this.land, stretch = p.rising ? 1.03 : 1;
     const breath = !air && p.speed < 10 ? Math.sin(p.time * 2.2) * 0.5 : 0;
     // Legs are two fixed-length bones; the hip height sets how much the knees bend (IK below).
     const thigh = k.leg * 0.53, shin = k.leg * 0.53;
