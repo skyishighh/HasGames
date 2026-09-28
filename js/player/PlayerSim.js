@@ -502,7 +502,7 @@ export class PlayerSim {
       facing: this.facing,
       crouch: this.crouching, climb: this.climbing, planted: this.planted, brace: this.bracing,
       carry: !!this.carrying, energy: Math.round(this.energy), dash: this.dashT > 0, ride: !!this.ride,
-      sprint: this.sprinting,
+      sprint: this.sprinting, air: !this.grounded,
       ab: [...this.abilities],
       beam: this.beam && [this.beam.x1, this.beam.y1, this.beam.x2, this.beam.y2].map(Math.round),
       flare: this.flareT > 0,

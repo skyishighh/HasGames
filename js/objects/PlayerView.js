@@ -143,7 +143,9 @@ export class PlayerView {
 
     const r = ROLES[s.role] ?? ROLES.scout;
     const speed = Math.abs(this.vx);
-    const air = Math.abs(this.vy) > 40 && !s.climb && !s.ride;
+    // The physics' own ground contact (from the snapshot); older snapshots fall back to vertical speed.
+    this.airT = (s.air ?? Math.abs(this.vy) > 40) ? (this.airT ?? 0) + dt : 0;
+    const air = (this.airT > 0.05 || Math.abs(this.vy) > 120) && (s.air ?? true) && !s.climb && !s.ride;   // ignore 1-frame bumps
     if (this.wasAir && !air) this.land = Math.min(1, Math.abs(this.vy) / 500 + 0.5);
     this.wasAir = air;
     this.land = Math.max(0, this.land - dt * 5);
