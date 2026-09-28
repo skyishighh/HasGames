@@ -119,6 +119,12 @@ Status: **all four zones are rebuilt** to this rhythm. The level is 20,000 px wi
 - **Anchor:** plant in gusts → gaps timed between gusts → lever → slam through debris → slam onto a plate hidden under debris (drawbridge) → climb back up → plant on a plate in the wind → final slam.
 - **Weaver:** beam over a harmless trench → phantom bridges with a recharge island → beam a node → flare a node hidden behind its gate (beams stop at walls, flares don't) → lever bridge (a rest) → long bridges → mix.
 
+### Character animation plan (in progress)
+Characters are code-drawn silhouettes (`js/objects/PlayerView.js`) with real joints (two-bone IK for knees/elbows, feet, hands) driven by **key poses** copied from ChatGPT pose sheets in `docs/reference/poses/`. The game runs at half speed with a 1.5× camera by default (key 8 toggles full speed) and animations at half rate (`ANIM_RATE`), so poses can be judged closely.
+**Approach: polish the Scout to 100% first, then repeat the same process for Warden, Weaver and Anchor.**
+- Done (Scout): movement sheet → idle, walk and run cycles, jump rising, falling, landing, crouch; mid-air pose flicker fixed.
+- Next (Scout): the user's detailed polish pass on these poses; ability sheet (crawl, wall-slide, wall-jump, climb mesh, dash); lever pull (needs an "interacting" flag in the snapshot); check foot sliding caused by `ANIM_RATE` (fix with longer strides if needed).
+
 ### Implementation status
 All four roles are implemented in the **Ability Gym** (`js/levels/gym.js`), a developer test level with one station per ability. Keys 1–4 switch roles for testing. Not yet implemented: Weaver repel on threats (no threats exist yet), Anchor slam stun (no Tracers yet), Warden brace on doors (only crushers so far).
 
