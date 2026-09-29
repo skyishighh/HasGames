@@ -197,7 +197,7 @@ export class Level {
       gates: this.gates.map((g) => g.open),
       plates: this.plates.map((p) => p.pressed),
       buttons: this.buttons.map((b) => b.pressed),
-      levers: this.levers.map((l) => l.on),
+      levers: this.levers.map((l) => l.on),   // 0, or the side it was pulled to
       nodes: this.nodes.map((n) => n.lit || n.latched),
       phantom: this.phantom.map((p) => p.lit),
       crushers: this.crushers.map((c) => Math.round(c.view.y)),
@@ -219,7 +219,7 @@ export class Level {
       b.pressed = !!v;
       b.view.fillColor = v ? 0xdddddd : 0x444444;
     });
-    s.levers?.forEach((v, i) => this.setLever(i, !!v));
+    s.levers?.forEach((v, i) => this.setLever(i, v));
     s.nodes?.forEach((v, i) => {
       const n = this.nodes[i]; if (!n) return;
       if (!this.host) n.lit = !!v;
@@ -257,8 +257,10 @@ export class Level {
 
   breakObject(b) { this.#breakVisual(b); }
 
+  /** on: false/0 = up, or the side it was pulled towards (-1 left, +1 right; true = right). */
   setLever(i, on) {
     const lv = this.levers[i];
+    on = on === true ? 1 : on || 0;
     if (!lv || lv.on === on) return;
     lv.on = on;
     this.#drawLever(lv);
@@ -268,7 +270,7 @@ export class Level {
   #drawLever(lv) {
     const { x, y } = lv.data, g = lv.view.clear();
     g.fillStyle(INK, 1).fillRect(x - 7, y - 12, 14, 12);                      // base
-    const a = lv.on ? 0.55 : -0.55, len = 30;
+    const a = lv.on ? 0.6 * lv.on : 0.12, len = 30;                         // upright until pulled
     const hx = x + Math.sin(a) * len, hy = y - 10 - Math.cos(a) * len;
     g.lineStyle(4, INK, 1).lineBetween(x, y - 10, hx, hy);
     g.fillCircle(hx, hy, 4);

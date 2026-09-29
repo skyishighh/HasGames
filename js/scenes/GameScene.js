@@ -407,7 +407,14 @@ export class GameScene extends Phaser.Scene {
     for (const b of L.buttons) if (!b.pressed && L.crates.some((c) => hit(c.view.getBounds(), b.rect))) b.pressed = true;
     // Levers: pressing E within reach pulls one; it stays pulled.
     L.levers.forEach((lv, i) => {
-      if (!lv.on && players.some((p) => p.interactPressed && hit(p.bounds, lv.zone))) L.setLever(i, true);
+      const puller = !lv.on && players.find((p) => p.interactPressed && hit(p.bounds, lv.zone));
+      if (puller) {
+        const side = Math.sign(puller.x - lv.data.x) || -1;              // puller's side of the lever
+        L.setLever(i, side);                                             // the handle comes towards them
+        puller.pullT = 0.6;                                              // play the pull pose
+        puller.pullX = lv.data.x + side * (puller.stats.w / 2 + 9);     // step up to the lever
+        puller.facing = -side;                                           // face it
+      }
     });
     // Nodes: lit while light hits them; latching nodes stay on once powered.
     for (const n of L.nodes) {

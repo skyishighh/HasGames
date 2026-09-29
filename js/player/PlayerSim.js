@@ -131,6 +131,8 @@ export class PlayerSim {
     const inp = this.input, pr = this.pressed;
     const body = this.body;
     this.lockT = Math.max(0, this.lockT - dt);
+    this.kickT = Math.max(0, (this.kickT ?? 0) - dt);   // visual: just pushed off a wall
+    this.pullT = Math.max(0, (this.pullT ?? 0) - dt);   // visual: pulling a lever
     this.dashCd = Math.max(0, this.dashCd - dt);
     this.dropT = Math.max(0, this.dropT - dt);
     this.flareT = Math.max(0, this.flareT - dt);
@@ -140,6 +142,12 @@ export class PlayerSim {
     body.pushable = !this.planted;
 
     if (this.ride) { this.#stepRide(dt); this.pressed = {}; return; }
+    // Pulling a lever: step up to it and hold still until the pull is done.
+    if (this.pullT > 0 && this.pullX !== undefined && this.grounded) {
+      body.setVelocityX(Phaser.Math.Clamp((this.pullX - this.x) * 12, -160, 160));
+      this.pressed = {};
+      return;
+    }
 
     // E press, read by the world step this frame (levers). Cleared by the scene after the world step.
     if (pr.interact) this.interactPressed = true;
@@ -229,6 +237,7 @@ export class PlayerSim {
         body.setVelocity(-this.wallDir * T.wallJumpX, -T.wallJumpY);
         this.facing = -this.wallDir;
         this.lockT = T.wallLock;
+        this.kickT = 0.35;
         this.wallT = 0; this.jumpBufT = 0;
         return true;
       }
@@ -503,6 +512,8 @@ export class PlayerSim {
       crouch: this.crouching, climb: this.climbing, planted: this.planted, brace: this.bracing,
       carry: !!this.carrying, energy: Math.round(this.energy), dash: this.dashT > 0, ride: !!this.ride,
       sprint: this.sprinting, air: !this.grounded,
+      wall: this.wallT > 0 && !this.grounded && this.kickT <= 0 ? this.wallDir : 0,   // clinging: -1 left, +1 right
+      kick: this.kickT > 0, pull: this.pullT > 0 ? Math.round((1 - this.pullT / 0.6) * 100) / 100 : 0,
       ab: [...this.abilities],
       beam: this.beam && [this.beam.x1, this.beam.y1, this.beam.x2, this.beam.y2].map(Math.round),
       flare: this.flareT > 0,
