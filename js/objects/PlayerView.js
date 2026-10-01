@@ -78,6 +78,19 @@ const KEYS = {
     pullStart: { hip: 0.86, lean: 0.25, ground: true, legs: [[0.35, 0, 0], [-0.25, 0, 0.3]], arms: [[0.85, 0.2, -1], [0.92, 0.12, -1]] },
     pullEnd:   { hip: 0.8, lean: -0.35, ground: true, legs: [[0.48, 0, -0.15], [-0.3, 0, 0.25]], arms: [[0.55, 0.3, -1], [0.62, 0.22, -1]] },
     land:    { hip: 0.6, lean: 0.45, ground: true, legs: [[0.22, 0, 0], [-0.18, 0, 0.3]], arms: [[0.35, 0.8, -1], [0.5, 0.75, -1]] },
+    // DASH (sheet scout_abilities, row 1): wind-up → launch → glide, then recover into the run.
+    dashWind:   { hip: 0.55, lean: 0.4, ground: true, legs: [[0.22, 0, 0], [-0.32, 0, 0.4]], arms: [[-0.6, 0.35, -1], [-0.5, 0.5, -1]] },
+    dashLaunch: { hip: 0.58, lean: 0.85, ground: true, legs: [[0.75, 0.04, -0.2], [-0.85, 0, 0.6]], arms: [[-0.95, -0.15, -1], [-0.9, 0.05, -1]] },
+    dashGlide:  { hip: 0.9, lean: 0.8, legs: [[0.18, 0.5, 0.9], [-0.18, 0.46, 1.0]], arms: [[-0.95, -0.12, -1], [-0.9, 0.05, -1]] },
+    dashRecover:{ hip: 0.92, lean: 0.3, ground: true, legs: [[0.5, 0, -0.2], [-0.5, 0.12, 0.8]], arms: [[-0.45, 0.45, -1], [0.4, 0.2, -1]] },
+    // CLIMB on mesh (row 2): one hand reaches high while the other leg's knee comes up, pull,
+    // then the other side; same-side hand and foot are half a cycle apart. "hang" when still.
+    climb: {
+      lean: -0.2, hip: [0.95, 0.95],
+      leg: [[0, [0.05, 0.92, 0.7]], [0.25, [0.3, 0.62, 0.5]], [0.5, [0.48, 0.42, 0.2]], [0.75, [0.3, 0.62, 0.5]]],
+      arm: [[0, [0.62, -0.72, -1]], [0.25, [0.8, -0.35, -1]], [0.5, [0.75, 0.15, -1]], [0.75, [0.8, -0.3, -1]]],
+    },
+    hang:    { hip: 0.95, lean: -0.2, legs: [[0.2, 0.82, 0.8], [0.05, 0.88, 0.8]], arms: [[0.7, -0.6, -1], [0.75, -0.5, -1]] },
     crouch:  { hip: 0.42, lean: 0.5, ground: true, legs: [[0.2, 0, 0], [-0.14, 0, 0.45]], arms: [[0.32, 0.85, -1], [0.42, 0.8, -1]] },
   },
 };
@@ -114,10 +127,11 @@ function track(keys, t) {
 }
 
 /** Walk/run cycle pose at phase t (0..1). */
-function cyclePose(c, t) {
+function cyclePose(c, t, hanging = false) {
   const bob = Math.abs(Math.sin(t * Math.PI * 2));                   // 0 at contact, 1 at passing
   const hip = c.hip[0] + (c.hip[1] - c.hip[0]) * bob;
-  const legs = [track(c.leg, t), track(c.leg, t + 0.5)].map(([x, y, toe]) => [x, hip - y, toe]);
+  // ground cycles give foot lift; a hanging cycle (climb) gives the drop below the hip directly
+  const legs = [track(c.leg, t), track(c.leg, t + 0.5)].map(([x, y, toe]) => [x, hanging ? y : hip - y, toe]);
   // near arm swings with the far leg and vice versa
   return { hip, lean: c.lean, legs, arms: [track(c.arm, t), track(c.arm, t + 0.5)] };
 }
@@ -154,6 +168,7 @@ export class PlayerView {
       this.vy += ((s.y - this.last.y) / dt - this.vy) * 0.35;
     }
     this.last = { x: s.x, y: s.y, t: now };
+    this.dashDt = dt;
     this.lastState = s;
     this.x = s.x;
     this.y = s.y;
@@ -176,7 +191,7 @@ export class PlayerView {
     this.runT = (this.runT ?? 0) + ((s.sprint && speed > 5 ? 1 : 0) - (this.runT ?? 0)) * Math.min(1, dt * 6);
     const run = this.runT;
     // Advance the walk cycle by distance travelled, so feet don't slide at any fps.
-    if (s.climb) this.phase += climbed * (Math.PI * 2 / 40) * ANIM_RATE;
+    if (s.climb) this.phase += (climbed + moved * 0.5) * (Math.PI * 2 / 40) * ANIM_RATE;
     else if (!air && moved < 60) {
       const cyc = !keys ? 0 : s.crouch ? keys.crouchWalk.cycle : keys.walk.cycle + (keys.run.cycle - keys.walk.cycle) * run;
       const cycleLen = keys ? k.leg * 1.06 * cyc : 55;
@@ -187,7 +202,7 @@ export class PlayerView {
       k, f: s.wall ? s.wall : s.facing === -1 ? -1 : 1, speed, air,   // face the wall while clinging
       crouch: !!s.crouch, swing: Math.min(1, speed / r.speed) * (s.sprint ? 0.95 : 0.7), maxSpeed: r.speed,
       rising: air && this.vy < -60, time: now / 1000 * ANIM_RATE,   // breathing, hair, cloak ripple
-      key: keys && !s.climb && !s.planted && !s.carry && !s.brace && !s.ride ? this.#keyPose(keys, s, speed / r.speed, run, air) : null,
+      key: keys && (!s.climb || keys.climb) && !s.planted && !s.carry && !s.brace && !s.ride ? this.#keyPose(keys, s, speed / r.speed, run, air) : null,
     };
 
     // Soft edge (Limbo's play layer is never razor-sharp): the figure is drawn 4 extra times, shifted
@@ -205,6 +220,17 @@ export class PlayerView {
   /** Blend the role's key poses for the current state (movement, air, landing, crouch). */
   #keyPose(keys, s, speedFrac, run, air) {
     let p;
+    // dash recover: after a dash ends, the recover pose fades out over ~0.3 s (real time)
+    const dt = this.dashDt ?? 1 / 60;
+    if (s.dash) this.dashRec = 1; else this.dashRec = Math.max(0, (this.dashRec ?? 0) - dt / 0.3);
+    if (s.climb && keys.climb) {
+      const move = Phaser.Math.Clamp(Math.hypot(this.vx, this.vy) / 40, 0, 1);
+      return mix(resolve(keys.hang), cyclePose(keys.climb, this.phase / (Math.PI * 2), true), move);
+    }
+    if (s.dash && keys.dashLaunch) {
+      const u = s.dash, W = resolve(keys.dashWind), La = resolve(keys.dashLaunch), G = resolve(keys.dashGlide);
+      return u < 0.2 ? mix(W, La, u / 0.2) : u < 0.55 ? La : mix(La, G, (u - 0.55) / 0.45);
+    }
     if (s.wall && keys.wall) p = resolve(keys.wall);
     else if (s.kick && keys.kick) p = resolve(keys.kick);
     else if (s.pull && !air && keys.pullStart) {
@@ -218,7 +244,10 @@ export class PlayerView {
       else p = mix(resolve(keys.idle), mix(cyclePose(keys.walk, t), cyclePose(keys.run, t), run), move);
       p = mix(p, resolve(keys.land), this.land * 0.6);                // absorb the landing (softly)
     }
-    if (s.dash) p = { ...p, lean: p.lean + 0.4 };
+    if (this.dashRec > 0 && keys.dashRecover) {                       // glide → recover → normal pose
+      const r = this.dashRec;
+      p = mix(p, air ? resolve(keys.dashGlide) : r > 0.5 ? mix(resolve(keys.dashRecover), resolve(keys.dashGlide), (r - 0.5) * 2) : resolve(keys.dashRecover), Math.min(1, r * 1.6));
+    } else if (s.dash) p = { ...p, lean: p.lean + 0.4 };
     return p;
   }
 
