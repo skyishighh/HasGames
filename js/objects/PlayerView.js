@@ -69,11 +69,13 @@ const KEYS = {
     },
     rise:    { hip: 0.93, lean: 0.18, legs: [[0.2, 0.68, 0.45], [-0.28, 0.8, 0.8]], arms: [[-0.35, 0.65, -1], [0.2, 0.7, -1]] },
     fall:    { hip: 0.98, lean: -0.03, legs: [[0.06, 0.95, 0.8], [-0.08, 0.93, 0.8]], arms: [[-0.4, 0.55, -1], [0.42, 0.52, -1]] },
-    // Clinging to a wall (drawn facing the wall): near hand pressed high on it, one foot braced, the
-    // other leg dangling.
-    wall:    { hip: 0.9, lean: -0.1, legs: [[0.3, 0.55, -0.6], [-0.06, 0.9, 0.7]], arms: [[-0.2, 0.6, -1], [0.12, -0.5, 1]] },   // hand up along the wall edge
-    // Pushing off a wall (facing away from it): the kicking leg stretched back, knee tucked, arms up.
-    kick:    { hip: 0.9, lean: 0.35, legs: [[0.3, 0.45, 0.5], [-0.55, 0.62, 1.0]], arms: [[0.3, 0.05, -1], [0.42, -0.1, -1]] },
+    // WALL (sheet scout_wall): grab → slide while clinging (drawn facing the wall), then a quick coil
+    // ("crouch to jump", still facing the wall) and the push-off facing away. The wall surface is
+    // about half a hitbox in front of the hip: hands and feet stop just short of it so they stay visible.
+    wallGrab:   { hip: 0.9, lean: 0.05, legs: [[0.3, 0.55, -1.2], [-0.15, 0.95, 0.9]], arms: [[0.42, -0.35, -1], [0.4, -0.22, -1]] },
+    wallSlide:  { hip: 0.9, lean: -0.15, legs: [[0.32, 0.5, -1.2], [0.34, 0.85, -1.3]], arms: [[0.5, -0.9, -1], [0.58, 0.15, -1]] },
+    wallCoil:   { hip: 0.78, lean: 0.1, legs: [[0.26, 0.35, -1.2], [0.3, 0.55, -1.3]], arms: [[0.4, 0.05, -1], [0.42, -0.2, -1]] },
+    kick:       { hip: 0.9, lean: 0.45, legs: [[0.25, 0.45, 0.9], [-0.95, 0.35, 0.6]], arms: [[0.6, -0.6, -1], [0.75, -0.4, -1]] },
     // Pulling a lever (sheet pose 10): feet braced, arms reach forward to grab, then lean back and pull.
     pullStart: { hip: 0.86, lean: 0.25, ground: true, legs: [[0.35, 0, 0], [-0.25, 0, 0.3]], arms: [[0.85, 0.2, -1], [0.92, 0.12, -1]] },
     pullEnd:   { hip: 0.8, lean: -0.35, ground: true, legs: [[0.48, 0, -0.15], [-0.3, 0, 0.25]], arms: [[0.55, 0.3, -1], [0.62, 0.22, -1]] },
@@ -199,7 +201,7 @@ export class PlayerView {
     }
 
     const pose = {
-      k, f: s.wall ? s.wall : s.facing === -1 ? -1 : 1, speed, air,   // face the wall while clinging
+      k, f: s.wall ? s.wall : s.kick && s.kick < 0.2 && keys ? -(s.facing === -1 ? -1 : 1) : s.facing === -1 ? -1 : 1, speed, air,   // face the wall while clinging
       crouch: !!s.crouch, swing: Math.min(1, speed / r.speed) * (s.sprint ? 0.95 : 0.7), maxSpeed: r.speed,
       rising: air && this.vy < -60, time: now / 1000 * ANIM_RATE,   // breathing, hair, cloak ripple
       key: keys && (!s.climb || keys.climb) && !s.planted && !s.carry && !s.brace && !s.ride ? this.#keyPose(keys, s, speed / r.speed, run, air) : null,
@@ -231,8 +233,10 @@ export class PlayerView {
       const u = s.dash, W = resolve(keys.dashWind), La = resolve(keys.dashLaunch), G = resolve(keys.dashGlide);
       return u < 0.2 ? mix(W, La, u / 0.2) : u < 0.55 ? La : mix(La, G, (u - 0.55) / 0.45);
     }
-    if (s.wall && keys.wall) p = resolve(keys.wall);
-    else if (s.kick && keys.kick) p = resolve(keys.kick);
+    // time on the wall (real seconds): grab first, then ease into the slide
+    this.wallTime = s.wall ? (this.wallTime ?? 0) + dt : 0;
+    if (s.wall && keys.wallGrab) p = mix(resolve(keys.wallGrab), resolve(keys.wallSlide), Phaser.Math.Clamp((this.wallTime - 0.15) / 0.25, 0, 1));
+    else if (s.kick && keys.kick) p = s.kick < 0.2 ? resolve(keys.wallCoil) : mix(resolve(keys.wallCoil), resolve(keys.kick), Math.min(1, (s.kick - 0.2) / 0.15));
     else if (s.pull && !air && keys.pullStart) {
       const u = Math.min(1, s.pull * 1.6), e = u * u * (3 - 2 * u);    // reach & grab, then pull back
       p = mix(resolve(keys.pullStart), resolve(keys.pullEnd), e);

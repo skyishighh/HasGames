@@ -513,7 +513,7 @@ export class PlayerSim {
       carry: !!this.carrying, energy: Math.round(this.energy), dash: this.dashT > 0 ? Math.max(0.01, +(1 - this.dashT / T.dashTime).toFixed(2)) : 0,   // progress 0..1 ride: !!this.ride,
       sprint: this.sprinting, air: !this.grounded,
       wall: this.wallT > 0 && !this.grounded && this.kickT <= 0 ? this.wallDir : 0,   // clinging: -1 left, +1 right
-      kick: this.kickT > 0, pull: this.pullT > 0 ? Math.round((1 - this.pullT / 0.6) * 100) / 100 : 0,
+      kick: this.kickT > 0 ? Math.max(0.01, Math.round((1 - this.kickT / 0.35) * 100) / 100) : 0,   // push-off progress 0..1 pull: this.pullT > 0 ? Math.round((1 - this.pullT / 0.6) * 100) / 100 : 0,
       ab: [...this.abilities],
       beam: this.beam && [this.beam.x1, this.beam.y1, this.beam.x2, this.beam.y2].map(Math.round),
       flare: this.flareT > 0,
