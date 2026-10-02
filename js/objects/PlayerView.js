@@ -18,7 +18,7 @@ const SHAPES = {
   scout:  { leg: 15, torso: 8,  headR: 6,   hipW: 7,  chestW: 8,  neckW: 4, arm: 10, legLimb: [2.8, 1.5],  armLimb: [2.1, 1.3] },
   // Warden (docs/reference/poses/warden_design.png): gentle giant — barrel chest, small head set
   // forward and low in front of the shoulders, long heavy arms to the knees, sturdy legs.
-  warden: { leg: 19, torso: 19, headR: 5.2, hipW: 10, chestW: 23, neckW: 7, arm: 24, legLimb: [7.5, 4.6], armLimb: [7, 4.2], headFwd: 5.5, headDrop: 0.5, chestBulge: 2.5, shoulderX: 0.24, armHang: 0.98, armFwd: 0.2, handScale: 0.55, armRim: 0.45 },
+  warden: { leg: 19, torso: 19, headR: 5.2, hipW: 10, chestW: 18, neckW: 7, arm: 24, legLimb: [7.5, 4.6], armLimb: [7, 4.2], headFwd: 3.5, headDrop: -1, chestBulge: 4, stand: 1.04, shoulderX: 0.24, armHang: 0.98, armFwd: 0.2, handScale: 0.55, armRim: 0.45 },
   weaver: { leg: 16, torso: 14, headR: 6.5, hipW: 8,  chestW: 10, neckW: 4, arm: 13, legLimb: [2.8, 1.6],  armLimb: [2.2, 1.4] },
   anchor: { leg: 14, torso: 16, headR: 7,   hipW: 13, chestW: 17, neckW: 7, arm: 14, legLimb: [5, 3.8],   armLimb: [4.6, 3.6] },
 };
@@ -269,7 +269,7 @@ export class PlayerView {
     // Legs are two fixed-length bones; the hip height sets how much the knees bend (IK below).
     const thigh = k.leg * 0.53, shin = k.leg * 0.53;
     const bob = !air && !s.climb && !s.planted ? -Math.abs(Math.sin(this.phase)) * 1.2 * swing : 0;   // rise at passing
-    const hipH = k.leg * (crouch ? 0.6 : s.planted ? 0.84 : 0.95) * (1 - 0.14 * this.land);
+    const hipH = k.leg * (crouch ? 0.6 : s.planted ? 0.84 : (k.stand ?? 0.95)) * (1 - 0.14 * this.land);
     const legLen = hipH;
     const K = p.key, L = thigh + shin;
     const hipX = s.x, hipY = K ? s.y - K.hip * L : s.y - hipH - (air ? 2 : 0) + bob;
