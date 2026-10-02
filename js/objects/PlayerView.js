@@ -319,9 +319,16 @@ export class PlayerView {
     const R = (k) => resolve(keys[k]);
     const ease = (u) => u * u * (3 - 2 * u);
     if (s.brace) {                                               // braced stance; small strained steps when shuffling
-      const move = Phaser.Math.Clamp(Math.abs(this.vx) / 20, 0, 1), st = Math.sin(this.phase) * 0.12 * move;
+      // Own short step cycle (one step per ~0.35 leg lengths), so the slow shuffle shows real steps
+      // instead of the long walk cycle barely moving: each foot lifts and plants in turn.
+      const k = SHAPES.warden, moved = Math.abs(this.vx) * (this.dashDt ?? 1 / 60);
+      this.bracePh = (this.bracePh ?? 0) + moved * (Math.PI * 2) / (k.leg * 1.06 * 0.7);
+      const move = Phaser.Math.Clamp(Math.abs(this.vx) / 8, 0, 1), ph = this.bracePh;
       const p = R('brace');
-      return { ...p, legs: p.legs.map(([x, y, t], i) => [x + (i ? -st : st), y - Math.max(0, i ? -Math.sin(this.phase) : Math.sin(this.phase)) * 0.08 * move, t]) };
+      return { ...p, legs: p.legs.map(([x, y, t], i) => {
+        const c = Math.sin(ph + (i ? Math.PI : 0));                  // +: this foot swings forward, lifted
+        return [x + c * 0.18 * move, y - Math.max(0, c) * 0.2 * move, t + Math.max(0, c) * 0.5 * move];
+      }) };
     }
     if (s.smash) {                                               // wind-up → impact → recover
       const u = s.smash;
