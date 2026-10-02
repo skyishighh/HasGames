@@ -17,6 +17,7 @@ const T = {
   slamSpeed: 700, maxFall: 900, chainRange: 320, chainLife: 10, yankRange: 280, yankSpeed: 700,
   rideSpeed: 420, dropTime: 0.25,
   jumpBuffer: 0.12, coyote: 0.08, wallGrace: 0.1,
+  braceShuffle: 0.3,   // Warden's walk speed while bracing a crusher (x his normal speed)
 };
 
 // Warden animation timers (seconds of game time). Visual only: the ability itself happens instantly.
@@ -200,9 +201,10 @@ export class PlayerSim {
         else { body.setVelocityX(0); this.#applyWind(ctx); this.pressed = {}; return; }
       }
       const speed = this.crouching ? Math.min(this.stats.speed, T.crawlSpeed)
+        : this.bracing ? this.stats.speed * T.braceShuffle          // holding a crusher up: slow, strained shuffle
         : this.stats.speed * (this.sprinting ? SPRINT_MULT : 1);
       if (this.lockT <= 0) body.setVelocityX(dir * speed);
-      if (this.jumpBufT > 0 && this.coyoteT > 0 && !inp.down && this.#canStand(ctx.level)) {   // no jumping inside a vent
+      if (this.jumpBufT > 0 && this.coyoteT > 0 && !inp.down && !this.bracing && this.#canStand(ctx.level)) {   // no jumping inside a vent
         body.setVelocityY(-this.stats.jump);
         this.jumpBufT = 0; this.coyoteT = 0;
       }

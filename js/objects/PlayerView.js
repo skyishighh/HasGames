@@ -318,7 +318,11 @@ export class PlayerView {
     if (!keys.brace) return null;
     const R = (k) => resolve(keys[k]);
     const ease = (u) => u * u * (3 - 2 * u);
-    if (s.brace) return R('brace');
+    if (s.brace) {                                               // braced stance; small strained steps when shuffling
+      const move = Phaser.Math.Clamp(Math.abs(this.vx) / 20, 0, 1), st = Math.sin(this.phase) * 0.12 * move;
+      const p = R('brace');
+      return { ...p, legs: p.legs.map(([x, y, t], i) => [x + (i ? -st : st), y - Math.max(0, i ? -Math.sin(this.phase) : Math.sin(this.phase)) * 0.08 * move, t]) };
+    }
     if (s.smash) {                                               // wind-up → impact → recover
       const u = s.smash;
       return u < 0.25 ? mix(R('smashRec'), R('smashUp'), ease(u / 0.25))
