@@ -8,6 +8,7 @@
 import { ROLES } from '../roles.js';
 
 const INK = 0x050505;
+const RIM = 0x8a8a86;      // thin light outline between overlapping black shapes (Warden's near arm)
 const SOFT_EDGE = 0.9;   // screen px: how far the soft rim extends past the silhouette
 const ANIM_RATE = 0.6;   // animation speed: < 1 = legs cycle less often per distance (slower, calmer cadence)
 
@@ -15,7 +16,9 @@ const ANIM_RATE = 0.6;   // animation speed: < 1 = legs cycle less often per dis
 // limb: [thickness at the shoulder/hip, at the hand/foot].
 const SHAPES = {
   scout:  { leg: 15, torso: 8,  headR: 6,   hipW: 7,  chestW: 8,  neckW: 4, arm: 10, legLimb: [2.8, 1.5],  armLimb: [2.1, 1.3] },
-  warden: { leg: 15, torso: 19, headR: 7,   hipW: 12, chestW: 20, neckW: 8, arm: 20, legLimb: [6, 3.8],   armLimb: [5.5, 3.2] },
+  // Warden (docs/reference/poses/warden_design.png): gentle giant — barrel chest, small head set
+  // forward and low in front of the shoulders, long heavy arms to the knees, sturdy legs.
+  warden: { leg: 19, torso: 19, headR: 5.2, hipW: 10, chestW: 23, neckW: 7, arm: 24, legLimb: [7.5, 4.6], armLimb: [7, 4.2], headFwd: 5.5, headDrop: 0.5, chestBulge: 2.5, shoulderX: 0.24, armHang: 0.98, armFwd: 0.2, handScale: 0.55, armRim: 0.45 },
   weaver: { leg: 16, torso: 14, headR: 6.5, hipW: 8,  chestW: 10, neckW: 4, arm: 13, legLimb: [2.8, 1.6],  armLimb: [2.2, 1.4] },
   anchor: { leg: 14, torso: 16, headR: 7,   hipW: 13, chestW: 17, neckW: 7, arm: 14, legLimb: [5, 3.8],   armLimb: [4.6, 3.6] },
 };
@@ -275,7 +278,7 @@ export class PlayerView {
     const neckX = K ? hipX + f * Math.sin(K.lean) * torsoH : hipX + f * lean * torsoH * 0.7;
     const neckY = K ? hipY - Math.cos(K.lean) * torsoH + breath : hipY - torsoH + breath;
     const R = k.headR;
-    const headX = neckX + f * (crouch ? 3 : 1), headY = neckY - R * 0.85;
+    const headX = neckX + f * (k.headFwd ?? (crouch ? 3 : 1)), headY = neckY - R * 0.85 + (k.headDrop ?? 0);
     const widen = 1 + 0.12 * this.land;
 
     // --- behind the body: cloak, anchor on the back ---
@@ -312,12 +315,16 @@ export class PlayerView {
 
     // --- body: a smooth bean from the hips to the neck ---
     this.#bean(g, hipX, hipY + 1, neckX, neckY, k.hipW * widen, k.chestW * widen, k.neckW);
+    if (k.chestBulge) {                                          // barrel chest pushing out in front
+      const cx = hipX + (neckX - hipX) * 0.68 + f * k.chestBulge, cy = hipY + (neckY - hipY) * 0.68;
+      g.fillEllipse(cx, cy, k.chestW * 0.8, k.chestW * 0.75);
+    }
 
     // --- arms: pick where the hand is, IK finds the elbow (the far arm first, a touch thinner) ---
     const shY = neckY + torsoH * 0.12;
     const upper = k.arm * 0.52, fore = k.arm * 0.52;
     for (const side of [-f, f]) {
-      const shX = neckX + side * k.chestW * 0.3;
+      const shX = neckX + side * k.chestW * (k.shoulderX ?? 0.3);   // side view: heavy roles' arms hang alongside the body
       let hx, hy, elbow = -f;                                 // elbows point backwards by default
       const beamArm = Array.isArray(s.beam) && side === f;
       if (K && !beamArm) {
@@ -331,16 +338,23 @@ export class PlayerView {
       } else if (air) { hx = shX + side * k.arm * 0.4; hy = shY - k.arm * (p.rising ? 0.55 : 0.1); elbow = side; }
       else {
         // swing opposite to the legs; the forward arm bends more (a sprint pumps hard at the elbow)
-        const a = Math.sin(this.phase + (side === f ? Math.PI : 0)) * swing * 0.9 + (s.role === 'warden' ? 0.08 * f : 0);
-        const reach = k.arm * (0.9 - (a * f > 0 ? a * f * (s.sprint ? 0.5 : 0.3) : 0)) * (crouch ? 0.8 : 1);
+        const a = Math.sin(this.phase + (side === f ? Math.PI : 0)) * swing * 0.9 + (k.armFwd ?? 0) * f;
+        const reach = k.arm * ((k.armHang ?? 0.9) - (a * f > 0 ? a * f * (s.sprint ? 0.5 : 0.3) : 0)) * (crouch ? 0.8 : 1);
         hx = shX + Math.sin(a) * reach * f; hy = shY + Math.cos(a) * reach;
       }
       const [ex, ey, wx, wy] = ik(shX, shY, hx, hy, upper, fore, elbow);
       const far = side !== f ? 0.85 : 1;
-      this.#limb(g, [[shX, shY], [ex, ey], [wx, wy]], [k.armLimb[0] * far, k.armLimb[1] * far]);
+      const pts = [[shX, shY], [ex, ey], [wx, wy]];
+      // Near arm over a wide body: a thin light rim (like the design sheet) keeps it readable.
+      if (k.armRim && side === f && g === this.gfx) {
+        g.fillStyle(RIM, 1);
+        this.#limb(g, pts, [k.armLimb[0] + k.armRim * 2, k.armLimb[1] + k.armRim * 2]);
+        g.fillStyle(INK, 1);
+      }
+      this.#limb(g, pts, [k.armLimb[0] * far, k.armLimb[1] * far]);
       // hand: a small shape continuing past the wrist
       const hl = Math.hypot(wx - ex, wy - ey) || 1, dxh = (wx - ex) / hl, dyh = (wy - ey) / hl;
-      const handR = k.armLimb[1] * (s.role === 'warden' ? 0.72 : 0.62);
+      const handR = k.armLimb[1] * (k.handScale ?? 0.62);
       g.fillCircle(wx + dxh * handR * 0.9, wy + dyh * handR * 0.9, handR);
       if (s.role === 'weaver' && (!s.ab || s.ab.includes('beam'))) this.#glowHand(g, wx + dxh * handR, wy + dyh * handR, s.energy);
     }
@@ -392,9 +406,9 @@ export class PlayerView {
   #head(g, s, p, x, y, R) {
     const { f } = p, trail = this.trail;
     g.fillStyle(INK, 1);
-    if (s.role === 'warden' || s.role === 'weaver') {
+    if (s.role === 'weaver') {
       // Rounded hood, a little bigger than the head; its soft tip droops down the back and trails.
-      const hr = R * (s.role === 'warden' ? 1.2 : 1.15);
+      const hr = R * 1.15;
       g.fillCircle(x - f * 0.8, y - 0.3, hr);
       const bx = x - f * hr * 0.7, by = y - hr * 0.55;
       const tipX = x - f * hr * 1.15 + trail * 0.5, tipY = y + hr * 1.35 - Math.abs(trail) * 0.2;   // droops down the back
@@ -404,6 +418,13 @@ export class PlayerView {
       g.fillEllipse(x, y, R * 2, R * 2.05);
     }
     if (s.role === 'scout') this.#hair(g, x, y, R, f, p);
+    if (s.role === 'warden') {                                   // small tuft of hair on top
+      const sway = trail * 0.15;
+      for (const [a, l] of [[-0.5, 3.2], [-0.05, 3.8], [0.4, 2.8]]) {
+        const bx = x + f * Math.sin(a) * R * 0.7, by = y - Math.cos(a) * R * 0.75;
+        g.fillTriangle(bx - 1.1, by + 0.5, bx + 1.1, by + 0.5, bx + f * (a * 2) - 0.6 + sway, by - l);
+      }
+    }
     if (s.role === 'anchor') {                                   // knit cap with a folded brim
       g.fillEllipse(x - f * 0.5, y - R * 0.55, R * 2.15, R * 1.25);
       g.fillCircle(x - f * R * 0.6 + trail * 0.2, y - R * 1.2, 1.8);
