@@ -99,6 +99,32 @@ const KEYS = {
     hang:    { hip: 0.95, lean: -0.2, legs: [[0.2, 0.82, 0.8], [0.05, 0.88, 0.8]], arms: [[0.7, -0.6, -1], [0.75, -0.5, -1]] },
     crouch:  { hip: 0.42, lean: 0.5, ground: true, legs: [[0.2, 0, 0], [-0.14, 0, 0.45]], arms: [[0.32, 0.85, -1], [0.42, 0.8, -1]] },
   },
+  // WARDEN (docs/reference/poses/warden_movement.png): heavy, calm and powerful. Upright walk with a
+  // long ground phase (never airborne), a lumbering forward-leaning run, low knee lifts.
+  warden: {
+    idle:    { hip: 0.98, lean: 0.04, ground: true, legs: [[0.12, 0, 0], [-0.1, 0, 0]], arms: [[-0.14, 0.95, -1], [0.1, 0.95, -1]] },
+    walk: {
+      cycle: 1.6, lean: 0.12, hip: [0.9, 0.97],
+      leg: [[0, [0.42, 0, -0.15]], [0.25, [0.05, 0, 0]], [0.5, [-0.38, 0.03, 0.5]], [0.75, [0.05, 0.22, 0.6]]],
+      arm: [[0, [-0.3, 0.85, -1]], [0.5, [0.32, 0.78, -1]]],
+    },
+    run: {
+      cycle: 2.4, lean: 0.4, hip: [0.85, 0.95],
+      leg: [[0, [0.6, 0, -0.2]], [0.2, [0.1, 0, 0]], [0.4, [-0.55, 0.1, 0.8]], [0.65, [-0.25, 0.45, 1.0]], [0.85, [0.35, 0.4, 0.5]]],
+      arm: [[0, [-0.45, 0.55, -1]], [0.5, [0.5, 0.3, -1]]],
+    },
+    crouchWalk: {
+      cycle: 0.8, lean: 0.3, hip: [0.55, 0.6],
+      leg: [[0, [0.3, 0, 0]], [0.5, [-0.25, 0, 0.3]], [0.75, [0.02, 0.14, 0.4]]],
+      arm: [[0, [0.3, 0.7, -1]], [0.5, [0.42, 0.66, -1]]],
+    },
+    rise:    { hip: 0.9, lean: 0.1, legs: [[0.15, 0.5, 0.6], [-0.25, 0.7, 0.9]], arms: [[0.5, -0.7, -1], [0.65, -0.55, -1]] },
+    fall:    { hip: 0.95, lean: 0.15, legs: [[0.1, 0.8, 0.7], [-0.15, 0.85, 0.8]], arms: [[-0.8, 0.1, -1], [0.75, 0.2, -1]] },
+    land:    { hip: 0.55, lean: 0.6, ground: true, legs: [[0.3, 0, 0], [-0.3, 0, 0.4]], arms: [[0.15, 0.85, -1], [0.5, 0.98, -1]] },
+    crouch:  { hip: 0.55, lean: 0.25, ground: true, legs: [[0.35, 0, 0], [-0.3, 0, 0.3]], arms: [[0.35, 0.65, -1], [0.45, 0.6, -1]] },
+    pullStart: { hip: 0.88, lean: 0.25, ground: true, legs: [[0.45, 0, 0], [-0.4, 0, 0.4]], arms: [[0.85, 0.2, -1], [0.9, 0.15, -1]] },
+    pullEnd:   { hip: 0.82, lean: -0.25, ground: true, legs: [[0.55, 0, -0.2], [-0.35, 0, 0.3]], arms: [[0.6, 0.25, -1], [0.65, 0.2, -1]] },
+  },
 };
 
 /** A pose with ground lifts converted to "drop below the hip", ready to blend. */

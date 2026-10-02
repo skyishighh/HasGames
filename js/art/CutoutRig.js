@@ -1,19 +1,19 @@
 // Cut-out ("puppet") characters: painted body-part images placed on the procedural skeleton that
 // PlayerView already computes (hips, knees, ankles, shoulders, elbows, wrists, neck, head).
-// The parts come from a parts sheet (docs/reference/poses/<role>_parts.png) cut into
-// assets/characters/<role>/*.png. Each part is drawn pointing straight down (limbs) or upright
+// The parts come from a parts sheet (docs/reference/poses/<role>_parts.png), cut and packed into one
+// texture atlas, assets/characters/<role>/<role>.png + .json (one texture = one GPU batch per character). Each part is drawn pointing straight down (limbs) or upright
 // (torso, head); `a` is the joint it hangs from and `b` the joint it points to, in sheet pixels.
 // Purely cosmetic, like the rest of PlayerView: physics never sees these images.
 
 const DIR = 'assets/characters/';
 const K = 0.4;   // the part images were saved at 0.4 x the sheet's resolution
+const RIM = '_rim';   // atlas frame suffix: light outline of a part (the part grown by ~1 px, light gray)
 
 // Per role: game px per sheet px, and each part's pivots in sheet pixels (origin = the part's
 // top-left corner on the sheet). Joint positions were measured from warden_parts.png.
 const RIGS = {
   warden: {
     scale: 0.052,
-    rimmed: ['upperarm', 'forearm'],
     parts: {
       thigh:    { origin: [363, 599],  a: [425, 645],  b: [430, 830] },
       shin:     { origin: [711, 633],  a: [766, 672],  b: [760, 845] },
@@ -29,17 +29,12 @@ const RIGS = {
 
 /** Queue the part images of every cut-out role. Call from the scene's preload(). */
 export function preloadCutouts(scene) {
-  for (const [role, rig] of Object.entries(RIGS)) {
-    for (const name of Object.keys(rig.parts)) scene.load.image(`cut_${role}_${name}`, `${DIR}${role}/${name}.png`);
-    // Light outlines for the near arm (the part grown by ~1 px, light gray), so it reads over the black body.
-    for (const name of rig.rimmed ?? []) scene.load.image(`cut_${role}_${name}_rim`, `${DIR}${role}/${name}_rim.png`);
-  }
+  for (const role of Object.keys(RIGS)) scene.load.atlas(`cut_${role}`, `${DIR}${role}/${role}.png`, `${DIR}${role}/${role}.json`);
 }
 
 /** True when a role has a rig and all of its part images loaded. */
 export function hasCutout(scene, role) {
-  const rig = RIGS[role];
-  return !!rig && Object.keys(rig.parts).every((n) => scene.textures.exists(`cut_${role}_${n}`));
+  return !!RIGS[role] && scene.textures.exists(`cut_${role}`);
 }
 
 export class CutoutRig {
@@ -47,7 +42,7 @@ export class CutoutRig {
     this.rig = RIGS[role];
     const img = (name, d, rim = false) => {
       const p = this.rig.parts[name];
-      const o = scene.add.image(0, 0, `cut_${role}_${name}${rim ? '_rim' : ''}`).setDepth(d);
+      const o = scene.add.image(0, 0, `cut_${role}`, rim ? name + RIM : name).setDepth(d);
       o.setOrigin((p.a[0] - p.origin[0]) * K / o.width, (p.a[1] - p.origin[1]) * K / o.height);
       o.rest = Math.atan2(p.b[1] - p.a[1], p.b[0] - p.a[0]);   // the part's own direction on the sheet
       return o;
@@ -87,9 +82,23 @@ export class CutoutRig {
     put(this.far.upper, farArm[0], farArm[1]); put(this.far.fore, farArm[1], farArm[2]);
     put(this.near.upper, nearArm[0], nearArm[1]); put(this.near.fore, nearArm[1], nearArm[2]);
     put(this.rim.upper, nearArm[0], nearArm[1]); put(this.rim.fore, nearArm[1], nearArm[2]);
+    // The outline only matters where the arm crosses the body (torso and thighs): fade it out as the
+    // forearm swings away from the body line (neck → knees), so it never shows as a halo on the sky.
+    const knees = [(j.legs[0][1][0] + j.legs[1][1][0]) / 2, (j.legs[0][1][1] + j.legs[1][1][1]) / 2];
+    const mid = [(nearArm[1][0] + nearArm[2][0]) / 2, (nearArm[1][1] + nearArm[2][1]) / 2];
+    const d = distToSegment(mid, j.neck, knees), bodyR = 6;   // game px: about half the body width
+    const a = Math.min(1, Math.max(0, 1 - (d - bodyR) / bodyR));
+    this.rim.upper.setAlpha(a); this.rim.fore.setAlpha(a);
   }
 
   setVisible(v) { for (const o of this.all) o.setVisible(v); }
   setAlpha(a) { for (const o of this.all) o.setAlpha(a); }
   destroy() { for (const o of this.all) o.destroy(); }
+}
+
+/** Distance from point P to the segment A–B. */
+function distToSegment([px, py], [ax, ay], [bx, by]) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy || 1;
+  const t = Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / l2));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
