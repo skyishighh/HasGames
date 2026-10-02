@@ -119,7 +119,7 @@ const KEYS = {
       arm: [[0, [0.3, 0.7, -1]], [0.5, [0.42, 0.66, -1]]],
     },
     rise:    { hip: 0.92, lean: 0.12, legs: [[0.22, 0.62, 0.5], [-0.22, 0.82, 0.8]], arms: [[0.55, -0.2, -1], [0.85, -0.3, -1]] },   // arms forward at head height, clear of the face
-    fall:    { hip: 0.95, lean: 0.15, legs: [[0.1, 0.8, 0.7], [-0.15, 0.85, 0.8]], arms: [[-0.7, 0.35, 1], [0.75, 0.2, -1]] },   // far arm back for balance (elbow bends down)
+    fall:    { hip: 0.95, lean: 0.15, legs: [[0.1, 0.8, 0.7], [-0.15, 0.85, 0.8]], arms: [[-0.2, 0.8, -1], [0.6, 0.45, -1]] },   // far arm down at the side, near arm forward for balance
     land:    { hip: 0.55, lean: 0.6, ground: true, legs: [[0.3, 0, 0], [-0.3, 0, 0.4]], arms: [[0.15, 0.85, -1], [0.5, 0.98, -1]] },
     crouch:  { hip: 0.55, lean: 0.25, ground: true, legs: [[0.35, 0, 0], [-0.3, 0, 0.3]], arms: [[0.35, 0.65, -1], [0.45, 0.6, -1]] },
     pullStart: { hip: 0.88, lean: 0.25, ground: true, legs: [[0.45, 0, 0], [-0.4, 0, 0.4]], arms: [[0.85, 0.2, -1], [0.9, 0.15, -1]] },
