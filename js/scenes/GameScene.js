@@ -122,6 +122,7 @@ export class GameScene extends Phaser.Scene {
         if (pl.sim.role === 'warden' && pl.sim.has('push') && side && into) {
           blk.body.setVelocityX(pl.body.velocity.x * 0.9);
           blk.pushedUntil = this.time.now + 100;       // no ground friction while being pushed
+          pl.sim.pushT = 0.15;                         // visual: pushing pose
         }
         return true;
       });

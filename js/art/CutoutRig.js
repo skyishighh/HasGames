@@ -47,13 +47,13 @@ export class CutoutRig {
       o.rest = Math.atan2(p.b[1] - p.a[1], p.b[0] - p.a[0]);   // the part's own direction on the sheet
       return o;
     };
-    // Back to front: far arm, far leg, torso, head, near leg, near-arm rim, near arm.
+    // Back to front: far arm, far leg, torso, near leg, near-arm rim, near arm, head.
     this.far = { upper: img('upperarm', depth - 0.04), fore: img('forearm', depth - 0.04) };
     this.legs = [0, 1].map((i) => ({
       thigh: img('thigh', depth - 0.03 + i * 0.04), shin: img('shin', depth - 0.03 + i * 0.04), foot: img('foot', depth - 0.03 + i * 0.04),
     }));
     this.torso = img('torso', depth);
-    this.head = img('head', depth + 0.005);
+    this.head = img('head', depth + 0.04);   // on top of everything: raised arms pass behind it (as on the sheet)
     this.rim = { upper: img('upperarm', depth + 0.02, true), fore: img('forearm', depth + 0.02, true) };
     this.near = { upper: img('upperarm', depth + 0.03), fore: img('forearm', depth + 0.03) };
     this.all = [this.far.upper, this.far.fore, ...this.legs.flatMap((l) => [l.thigh, l.shin, l.foot]),

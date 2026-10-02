@@ -19,6 +19,11 @@ const T = {
   jumpBuffer: 0.12, coyote: 0.08, wallGrace: 0.1,
 };
 
+// Warden animation timers (seconds of game time). Visual only: the ability itself happens instantly.
+const LIFT_T = 0.35, SMASH_T = 0.7, TOSS_T = 0.5;
+/** Snapshot progress 0..1 of a count-down timer (0 when idle, never exactly 0 while running). */
+const progress = (t, total) => (t > 0 ? Math.max(0.01, Math.round((1 - t / total) * 100) / 100) : 0);
+
 /** Shortest distance from point (px, py) to segment (x1, y1)-(x2, y2). */
 function distToSegment(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
@@ -132,6 +137,8 @@ export class PlayerSim {
     const body = this.body;
     this.lockT = Math.max(0, this.lockT - dt);
     this.kickT = Math.max(0, (this.kickT ?? 0) - dt);   // visual: just pushed off a wall
+    // Warden visual timers (animation only): pushing a block, lift grab, smash, throw (crate or mate)
+    for (const k of ['pushT', 'liftT', 'smashT', 'tossT']) this[k] = Math.max(0, (this[k] ?? 0) - dt);
     this.pullT = Math.max(0, (this.pullT ?? 0) - dt);   // visual: pulling a lever
     this.dashCd = Math.max(0, this.dashCd - dt);
     this.dropT = Math.max(0, this.dropT - dt);
@@ -290,6 +297,7 @@ export class PlayerSim {
         c.body.enable = true;
         c.body.reset(this.x + this.facing * 16, body.y - 12);
         c.body.setVelocity(this.facing * T.throwCrateX, -T.throwCrateY);
+        this.tossT = TOSS_T;
       }
       return false;
     }
@@ -301,9 +309,11 @@ export class PlayerSim {
         this.carrying = crate;
         crate.carriedBy = this.id;
         crate.view.body.enable = false;
+        this.liftT = LIFT_T;
         return false;
       }
       if (this.sprinting && this.has('smash')) {     // Shift + J (sprinting): smash
+        this.smashT = SMASH_T;
         const front = new Rect(this.facing > 0 ? body.right : body.x - T.smashRange, body.y, T.smashRange, body.height);
         const wall = level.cracked.find((w) => !w.broken && hit(front, w.view.getBounds()));
         if (wall) { level.breakObject(wall); ctx.fx('smash', wall.view.x, wall.view.y); }
@@ -323,6 +333,7 @@ export class PlayerSim {
       if (mate) {
         mate.lockT = 0.25;
         mate.body.setVelocity(this.facing * T.throwMateX, -T.throwMateY);
+        this.tossT = TOSS_T;
         ctx.fx('throw', mate.x, mate.feet);
       }
     }
@@ -510,10 +521,14 @@ export class PlayerSim {
       y: this.ride ? this.hitbox.y + this.stats.h / 2 : this.feet,
       facing: this.facing,
       crouch: this.crouching, climb: this.climbing, planted: this.planted, brace: this.bracing,
-      carry: !!this.carrying, energy: Math.round(this.energy), dash: this.dashT > 0 ? Math.max(0.01, +(1 - this.dashT / T.dashTime).toFixed(2)) : 0,   // progress 0..1 ride: !!this.ride,
+      carry: !!this.carrying, energy: Math.round(this.energy), ride: !!this.ride,
+      dash: this.dashT > 0 ? Math.max(0.01, +(1 - this.dashT / T.dashTime).toFixed(2)) : 0,   // progress 0..1
       sprint: this.sprinting, air: !this.grounded,
       wall: this.wallT > 0 && !this.grounded && this.kickT <= 0 ? this.wallDir : 0,   // clinging: -1 left, +1 right
-      kick: this.kickT > 0 ? Math.max(0.01, Math.round((1 - this.kickT / 0.35) * 100) / 100) : 0,   // push-off progress 0..1 pull: this.pullT > 0 ? Math.round((1 - this.pullT / 0.6) * 100) / 100 : 0,
+      kick: this.kickT > 0 ? Math.max(0.01, Math.round((1 - this.kickT / 0.35) * 100) / 100) : 0,   // push-off progress 0..1
+      pull: this.pullT > 0 ? Math.round((1 - this.pullT / 0.6) * 100) / 100 : 0,
+      push: this.pushT > 0,
+      lift: progress(this.liftT, LIFT_T), smash: progress(this.smashT, SMASH_T), toss: progress(this.tossT, TOSS_T),
       ab: [...this.abilities],
       beam: this.beam && [this.beam.x1, this.beam.y1, this.beam.x2, this.beam.y2].map(Math.round),
       flare: this.flareT > 0,

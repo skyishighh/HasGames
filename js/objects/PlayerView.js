@@ -124,6 +124,22 @@ const KEYS = {
     crouch:  { hip: 0.55, lean: 0.25, ground: true, legs: [[0.35, 0, 0], [-0.3, 0, 0.3]], arms: [[0.35, 0.65, -1], [0.45, 0.6, -1]] },
     pullStart: { hip: 0.88, lean: 0.25, ground: true, legs: [[0.45, 0, 0], [-0.4, 0, 0.4]], arms: [[0.85, 0.2, -1], [0.9, 0.15, -1]] },
     pullEnd:   { hip: 0.82, lean: -0.25, ground: true, legs: [[0.55, 0, -0.2], [-0.35, 0, 0.3]], arms: [[0.6, 0.25, -1], [0.65, 0.2, -1]] },
+    // ABILITIES (docs/reference/poses/warden_abilities.png)
+    // Push: hands flat on the block, low and leaning in; the legs alternate as he walks it forward.
+    pushA:   { hip: 0.75, lean: 0.75, ground: true, legs: [[0.35, 0, 0], [-0.85, 0, 0.6]], arms: [[0.8, 0.05, -1], [0.85, -0.05, -1]] },
+    pushB:   { hip: 0.75, lean: 0.75, ground: true, legs: [[-0.6, 0, 0.5], [0.25, 0.12, 0.3]], arms: [[0.8, 0.05, -1], [0.85, -0.05, -1]] },
+    // Lift: squat and grab the crate low in front, then stand up holding it overhead (arms straight up).
+    liftGrab: { hip: 0.55, lean: 0.5, ground: true, legs: [[0.3, 0, 0], [-0.3, 0, 0.3]], arms: [[0.5, 0.95, -1], [0.65, 0.9, -1]] },
+    carryArms: [[-0.12, -0.97, -1], [0.02, -0.97, -1]],
+    // Brace: holding a crushing slab up, arms straight up, legs wide and bent.
+    brace:   { hip: 0.72, lean: 0, ground: true, legs: [[0.45, 0, 0], [-0.45, 0, 0.1]], arms: [[-0.15, -0.96, -1], [0.05, -0.97, -1]] },
+    // Smash: fists together high overhead → slammed onto the ground in front → straighten up.
+    smashUp:   { hip: 0.9, lean: -0.2, ground: true, legs: [[0.35, 0, 0], [-0.35, 0, 0.3]], arms: [[-0.05, -0.97, -1], [0.02, -0.97, -1]] },
+    smashDown: { hip: 0.55, lean: 0.85, ground: true, legs: [[0.42, 0, 0], [-0.35, 0, 0.4]], arms: [[0.6, 0.9, -1], [0.72, 0.85, -1]] },
+    smashRec:  { hip: 0.95, lean: 0.15, ground: true, legs: [[0.15, 0, 0], [-0.12, 0, 0]], arms: [[0.0, 0.95, -1], [0.15, 0.92, -1]] },
+    // Throw (a crate or a friend): wind back with the hand above the shoulder, then swing forward and up.
+    tossBack: { hip: 0.9, lean: -0.15, ground: true, legs: [[0.45, 0, 0], [-0.45, 0, 0.4]], arms: [[0.45, 0.6, -1], [-0.35, -0.75, -1]] },
+    tossOut:  { hip: 0.9, lean: 0.3, ground: true, legs: [[0.5, 0, 0], [-0.5, 0, 0.6]], arms: [[-0.4, 0.75, -1], [0.55, -0.82, -1]] },
   },
 };
 
@@ -234,7 +250,7 @@ export class PlayerView {
       k, f: s.wall ? s.wall : s.kick && s.kick < 0.2 && keys ? -(s.facing === -1 ? -1 : 1) : s.facing === -1 ? -1 : 1, speed, air,   // face the wall while clinging
       crouch: !!s.crouch, swing: Math.min(1, speed / r.speed) * (s.sprint ? 0.95 : 0.7), maxSpeed: r.speed,
       rising: air && this.vy < -60, time: now / 1000 * ANIM_RATE,   // breathing, hair, cloak ripple
-      key: keys && (!s.climb || keys.climb) && !s.planted && !s.carry && !s.brace && !s.ride ? this.#keyPose(keys, s, speed / r.speed, run, air) : null,
+      key: keys && (!s.climb || keys.climb) && !s.planted && (!s.carry || keys.carryArms) && (!s.brace || keys.brace) && !s.ride ? this.#keyPose(keys, s, speed / r.speed, run, air) : null,
     };
 
     // Soft edge (Limbo's play layer is never razor-sharp): the figure is drawn 4 extra times, shifted
@@ -260,6 +276,8 @@ export class PlayerView {
     // dash recover: after a dash ends, the recover pose fades out over ~0.3 s (real time)
     const dt = this.dashDt ?? 1 / 60;
     if (s.dash) this.dashRec = 1; else this.dashRec = Math.max(0, (this.dashRec ?? 0) - dt / 0.3);
+    const w = this.#wardenPose(keys, s, air);
+    if (w) return w;
     if (s.climb && keys.climb) {
       const move = Phaser.Math.Clamp(Math.hypot(this.vx, this.vy) / 40, 0, 1);
       return mix(resolve(keys.hang), cyclePose(keys.climb, this.phase / (Math.PI * 2), true), move);
@@ -288,6 +306,37 @@ export class PlayerView {
       p = mix(p, air ? resolve(keys.dashGlide) : r > 0.5 ? mix(resolve(keys.dashRecover), resolve(keys.dashGlide), (r - 0.5) * 2) : resolve(keys.dashRecover), Math.min(1, r * 1.6));
     } else if (s.dash) p = { ...p, lean: p.lean + 0.4 };
     return p;
+  }
+
+  /** Warden ability poses (null when none applies). Each plays from its snapshot progress 0..1. */
+  #wardenPose(keys, s, air) {
+    if (!keys.brace) return null;
+    const R = (k) => resolve(keys[k]);
+    const ease = (u) => u * u * (3 - 2 * u);
+    if (s.brace) return R('brace');
+    if (s.smash) {                                               // wind-up → impact → recover
+      const u = s.smash;
+      return u < 0.25 ? mix(R('smashRec'), R('smashUp'), ease(u / 0.25))
+        : u < 0.45 ? mix(R('smashUp'), R('smashDown'), ease((u - 0.25) / 0.2))
+        : u < 0.7 ? R('smashDown') : mix(R('smashDown'), R('smashRec'), ease((u - 0.7) / 0.3));
+    }
+    if (s.toss) {                                                // wind back → release → settle
+      const u = s.toss;
+      return u < 0.3 ? mix(R('smashRec'), R('tossBack'), ease(u / 0.3))
+        : u < 0.55 ? mix(R('tossBack'), R('tossOut'), ease((u - 0.3) / 0.25)) : mix(R('tossOut'), R('smashRec'), ease((u - 0.55) / 0.45));
+    }
+    if (s.lift) {                                                // squat & grab, then rise with the crate overhead
+      const up = { ...R('idle'), arms: keys.carryArms.map((a) => [...a]) };
+      return s.lift < 0.5 ? R('liftGrab') : mix(R('liftGrab'), up, ease((s.lift - 0.5) / 0.5));
+    }
+    if (s.carry && air) return { ...R('fall'), arms: keys.carryArms.map((a) => [...a]) };
+    if (s.carry && !air) {                                       // walking legs, arms straight up under the crate
+      const t = this.phase / (Math.PI * 2), move = Phaser.Math.Clamp(Math.abs(this.vx) / 30, 0, 1);
+      const p = mix(R('idle'), cyclePose(keys.walk, t), move);
+      return { ...p, lean: 0.02, arms: keys.carryArms.map((a) => [...a]) };
+    }
+    if (s.push && !air) return mix(R('pushA'), R('pushB'), (1 - Math.cos(this.phase)) / 2);
+    return null;
   }
 
   /** Draws one full figure; returns the y of the top of the head (for the name label). */
