@@ -6,6 +6,7 @@
 // two-segment limbs, a big round head (Limbo proportions), and per-role features with secondary
 // motion (hair, scarf, hood tip, cloak hem) that trail behind the movement.
 import { ROLES } from '../roles.js';
+import { CutoutRig, hasCutout } from '../art/CutoutRig.js';
 
 const INK = 0x050505;
 const RIM = 0x8a8a86;      // thin light outline between overlapping black shapes (Warden's near arm)
@@ -18,7 +19,7 @@ const SHAPES = {
   scout:  { leg: 15, torso: 8,  headR: 6,   hipW: 7,  chestW: 8,  neckW: 4, arm: 10, legLimb: [2.8, 1.5],  armLimb: [2.1, 1.3] },
   // Warden (docs/reference/poses/warden_design.png): gentle giant — barrel chest, small head set
   // forward and low in front of the shoulders, long heavy arms to the knees, sturdy legs.
-  warden: { leg: 19, torso: 19, headR: 5.2, hipW: 10, chestW: 18, neckW: 7, arm: 24, legLimb: [7.5, 4.6], armLimb: [7, 4.2], headFwd: 3.5, headDrop: -1, chestBulge: 4, stand: 1.04, shoulderX: 0.24, armHang: 0.98, armFwd: 0.2, handScale: 0.55, armRim: 0.45 },
+  warden: { leg: 17.5, torso: 17.3, headR: 5.2, hipW: 10, chestW: 18, neckW: 7, arm: 18.6, legLimb: [7.5, 4.6], armLimb: [7, 4.2], headFwd: 2, headDrop: 5, shoulderY: 0.24, chestBulge: 4, stand: 1.04, shoulderX: 0.02, armHang: 0.98, armFwd: 0.2, handScale: 0.55, armRim: 0.45 },
   weaver: { leg: 16, torso: 14, headR: 6.5, hipW: 8,  chestW: 10, neckW: 4, arm: 13, legLimb: [2.8, 1.6],  armLimb: [2.2, 1.4] },
   anchor: { leg: 14, torso: 16, headR: 7,   hipW: 13, chestW: 17, neckW: 7, arm: 14, legLimb: [5, 3.8],   armLimb: [4.6, 3.6] },
 };
@@ -220,6 +221,11 @@ export class PlayerView {
     let top = s.y;
     for (const [g, dx, dy] of passes) top = this.#drawFigure(g, dx || dy ? { ...s, x: s.x + dx, y: s.y + dy } : s, pose);
     this.label.setPosition(s.x, top - 6);
+    // Cut-out roles: the painted part images replace the drawn shapes, on the same skeleton.
+    const cut = hasCutout(this.scene, s.role);
+    if (cut && this.rig?.role !== s.role) { this.rig?.destroy(); this.rig = new CutoutRig(this.scene, s.role, 3); this.rig.role = s.role; }
+    if (cut) { this.soft.clear(); this.gfx.clear(); this.rig.update(this.joints); }
+    this.rig?.setVisible(cut);
   }
 
   /** Blend the role's key poses for the current state (movement, air, landing, crouch). */
@@ -280,6 +286,7 @@ export class PlayerView {
     const R = k.headR;
     const headX = neckX + f * (k.headFwd ?? (crouch ? 3 : 1)), headY = neckY - R * 0.85 + (k.headDrop ?? 0);
     const widen = 1 + 0.12 * this.land;
+    const J = g === this.gfx ? (this.joints = { f, lean: K ? K.lean : lean, hip: [hipX, hipY], neck: [neckX, neckY], head: [headX, headY], legs: [], arms: [] }) : null;
 
     // --- behind the body: cloak, anchor on the back ---
     if (s.role === 'weaver') this.#cloak(g, s, p, hipX, hipY, neckX, neckY);
@@ -311,6 +318,7 @@ export class PlayerView {
       // foot: from the ankle forward; flat on the ground, tipped when lifted
       const tx = ex + Math.cos(toe) * footL * f, ty = Math.min(s.y, ey + Math.sin(toe) * footL);
       this.#limb(g, [[ex, ey], [tx, ty]], [k.legLimb[1] * (heavy ? 1.15 : 1.2), k.legLimb[1] * (heavy ? 1.0 : 0.9)]);
+      J?.legs.push([[hx, hipY], [kx, ky], [ex, ey], [tx, ty]]);
     }
 
     // --- body: a smooth bean from the hips to the neck ---
@@ -321,7 +329,7 @@ export class PlayerView {
     }
 
     // --- arms: pick where the hand is, IK finds the elbow (the far arm first, a touch thinner) ---
-    const shY = neckY + torsoH * 0.12;
+    const shY = neckY + torsoH * (k.shoulderY ?? 0.12);
     const upper = k.arm * 0.52, fore = k.arm * 0.52;
     for (const side of [-f, f]) {
       const shX = neckX + side * k.chestW * (k.shoulderX ?? 0.3);   // side view: heavy roles' arms hang alongside the body
@@ -345,6 +353,7 @@ export class PlayerView {
       const [ex, ey, wx, wy] = ik(shX, shY, hx, hy, upper, fore, elbow);
       const far = side !== f ? 0.85 : 1;
       const pts = [[shX, shY], [ex, ey], [wx, wy]];
+      J?.arms.push(pts);
       // Near arm over a wide body: a thin light rim (like the design sheet) keeps it readable.
       if (k.armRim && side === f && g === this.gfx) {
         g.fillStyle(RIM, 1);
@@ -508,5 +517,5 @@ export class PlayerView {
     this.#anchorShape(g, s.x + f * 15, neckY - 2, s.y + 7, 1.1);   // driven into the ground in front
   }
 
-  destroy() { this.soft.destroy(); this.gfx.destroy(); this.label.destroy(); }
+  destroy() { this.soft.destroy(); this.gfx.destroy(); this.label.destroy(); this.rig?.destroy(); }
 }

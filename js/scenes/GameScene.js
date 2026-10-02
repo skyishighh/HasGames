@@ -13,6 +13,7 @@ import { Scripted } from '../world/Scripted.js';
 import { SnapshotBuffer } from '../snapshot-buffer.js';
 import { enableSubstepping } from '../world/physics-substep.js';
 import { preloadBackdrops, Backdrops } from '../art/Backdrops.js';
+import { preloadCutouts } from '../art/CutoutRig.js';
 import gym from '../levels/gym.js';
 import awakening from '../levels/awakening.js';
 
@@ -55,6 +56,7 @@ export class GameScene extends Phaser.Scene {
 
   preload() {
     preloadBackdrops(this, LEVELS[this.levelKey]);
+    preloadCutouts(this);
   }
 
   create() {
@@ -530,7 +532,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: ring, radius: 70 + i * 30, alpha: 0, duration: 600, delay: i * 120, onComplete: () => ring.destroy() });
     }
     const view = this.views.get(id);
-    if (view) this.tweens.add({ targets: [view.gfx, view.soft], alpha: 0.2, duration: 60, yoyo: true, repeat: 4 });
+    if (view) this.tweens.add({ targets: [view.gfx, view.soft, ...(view.rig?.all ?? [])], alpha: 0.2, duration: 60, yoyo: true, repeat: 4 });
     if (id === this.localControl) this.#showHint(id, ability);
   }
 
