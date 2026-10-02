@@ -21,6 +21,7 @@ const T = {
 
 // Warden animation timers (seconds of game time). Visual only: the ability itself happens instantly.
 const LIFT_T = 0.35, SMASH_T = 0.7, TOSS_T = 0.5;
+const SMASH_HIT = 0.45;   // fraction of the smash when the fists hit the ground: the wall breaks then
 /** Snapshot progress 0..1 of a count-down timer (0 when idle, never exactly 0 while running). */
 const progress = (t, total) => (t > 0 ? Math.max(0.01, Math.round((1 - t / total) * 100) / 100) : 0);
 
@@ -287,6 +288,14 @@ export class PlayerSim {
     const body = this.body, pr = this.pressed, inp = this.input;
     this.bracing = false;
 
+    // Smash impact: the cracked wall in front breaks when the fists hit the ground, not on the key press.
+    if (this.smashPending && this.smashT <= SMASH_T * (1 - SMASH_HIT)) {
+      this.smashPending = false;
+      const front = new Rect(this.facing > 0 ? body.right : body.x - T.smashRange, body.y, T.smashRange, body.height);
+      const wall = level.cracked.find((w) => !w.broken && hit(front, w.view.getBounds()));
+      if (wall) { level.breakObject(wall); ctx.fx('smash', wall.view.x, wall.view.y); }
+    }
+
     if (this.carrying) {
       const c = this.carrying.view;
       c.setPosition(this.x, body.y - 12);
@@ -312,11 +321,9 @@ export class PlayerSim {
         this.liftT = LIFT_T;
         return false;
       }
-      if (this.sprinting && this.has('smash')) {     // Shift + J (sprinting): smash
+      if (this.sprinting && this.has('smash') && this.smashT <= 0) {   // Shift + J (sprinting): start a smash
         this.smashT = SMASH_T;
-        const front = new Rect(this.facing > 0 ? body.right : body.x - T.smashRange, body.y, T.smashRange, body.height);
-        const wall = level.cracked.find((w) => !w.broken && hit(front, w.view.getBounds()));
-        if (wall) { level.breakObject(wall); ctx.fx('smash', wall.view.x, wall.view.y); }
+        this.smashPending = true;
       }
     }
 
