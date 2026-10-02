@@ -21,7 +21,8 @@ const T = {
 
 // Warden animation timers (seconds of game time). Visual only: the ability itself happens instantly.
 const LIFT_T = 0.35, SMASH_T = 0.7, TOSS_T = 0.5;
-const SMASH_HIT = 0.45;   // fraction of the smash when the fists hit the ground: the wall breaks then
+const SMASH_HIT = 0.45;
+const TOSS_RELEASE = 0.45;   // fraction of the throw when a held friend leaves the Warden's palm   // fraction of the smash when the fists hit the ground: the wall breaks then
 /** Snapshot progress 0..1 of a count-down timer (0 when idle, never exactly 0 while running). */
 const progress = (t, total) => (t > 0 ? Math.max(0.01, Math.round((1 - t / total) * 100) / 100) : 0);
 
@@ -55,6 +56,8 @@ export class PlayerSim {
     this.lockT = 0;              // wall-jump control lock
     this.dashT = 0; this.dashCd = 0; this.airDash = true;
     this.carrying = null;        // crate object (Warden)
+    this.tossMate = null;        // teammate held on the palm before a throw (Warden)
+    this.heldBy = null;          // the Warden holding this player on his palm
     this.bracing = false;
     this.energy = 100; this.sinceBeam = 99;
     this.burnout = false;        // Weaver: light ran out; unusable until it recharges a bit
@@ -150,6 +153,19 @@ export class PlayerSim {
     body.pushable = !this.planted;
 
     if (this.ride) { this.#stepRide(dt); this.pressed = {}; return; }
+    // Held on a Warden's palm before a throw: pinned above his shoulder, no control.
+    if (this.heldBy) {
+      const w = this.heldBy;
+      if (w.tossMate !== this) { this.heldBy = null; body.setAllowGravity(true); }
+      else {
+        body.setAllowGravity(false);
+        body.reset(w.x - w.facing * 9, w.feet - 31 - this.stats.h / 2);   // feet on the raised palm (behind the shoulder, see tossBack)
+        body.setVelocity(0, 0);
+        this.facing = w.facing;
+        this.pressed = {};
+        return;
+      }
+    }
     // Pulling a lever: step up to it and hold still until the pull is done.
     if (this.pullT > 0 && this.pullX !== undefined && this.grounded) {
       body.setVelocityX(Phaser.Math.Clamp((this.pullX - this.x) * 12, -160, 160));
@@ -288,6 +304,22 @@ export class PlayerSim {
     const body = this.body, pr = this.pressed, inp = this.input;
     this.bracing = false;
 
+    if (this.tossMate) {
+      const mate = this.tossMate;
+      if (mate.heldBy !== this || !ctx.players.includes(mate)) { this.tossMate = null; }   // respawned / left
+      else if (this.tossT <= TOSS_T * (1 - TOSS_RELEASE)) {
+        this.tossMate = null;                          // release: launch forward and up
+        mate.heldBy = null;
+        mate.body.setAllowGravity(true);
+        mate.lockT = 0.25;
+        mate.body.setVelocity(this.facing * T.throwMateX, -T.throwMateY);
+        ctx.fx('throw', mate.x, mate.feet);
+      } else {
+        body.setVelocityX(0);                          // plant the feet during the wind-up
+        return true;
+      }
+    }
+
     // Smash impact: the cracked wall in front breaks when the fists hit the ground, not on the key press.
     if (this.smashPending && this.smashT <= SMASH_T * (1 - SMASH_HIT)) {
       this.smashPending = false;
@@ -335,13 +367,13 @@ export class PlayerSim {
     }
 
     // K next to a teammate: throw them.
-    if (pr.a2 && this.has('throwMate')) {
+    // Picked up onto the palm, held through the wind-up, launched at the release frame.
+    if (pr.a2 && this.has('throwMate') && !this.tossMate && this.grounded) {
       const mate = this.#nearestMate(ctx.players, T.throwMateRange);
-      if (mate) {
-        mate.lockT = 0.25;
-        mate.body.setVelocity(this.facing * T.throwMateX, -T.throwMateY);
+      if (mate && !mate.heldBy && !mate.ride && !mate.planted) {
+        mate.heldBy = this;
+        this.tossMate = mate;
         this.tossT = TOSS_T;
-        ctx.fx('throw', mate.x, mate.feet);
       }
     }
     return false;
