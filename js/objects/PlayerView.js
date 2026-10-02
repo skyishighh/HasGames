@@ -134,11 +134,11 @@ const KEYS = {
     // Brace: holding a crushing slab up, arms straight up, legs wide and bent.
     brace:   { hip: 0.72, lean: 0, ground: true, legs: [[0.45, 0, 0], [-0.45, 0, 0.1]], arms: [[-0.15, -0.96, -1], [0.05, -0.97, -1]] },
     // Smash: fists together high overhead → slammed onto the ground in front → straighten up.
-    // wind-up: body arched back, both fists high BEHIND the head; impact: bent forward over wide legs,
-    // arms straight down so the fists clearly hit the ground in front of the feet.
-    smashUp:   { hip: 0.92, lean: -0.3, ground: true, legs: [[0.4, 0, 0], [-0.4, 0, 0.3]], arms: [[-0.35, -0.9, -1], [-0.25, -0.93, -1]] },
-    smashMid:  { hip: 0.85, lean: 0.2, ground: true, legs: [[0.42, 0, 0], [-0.4, 0, 0.35]], arms: [[0.55, -0.75, -1], [0.62, -0.7, -1]] },   // fists coming over, in front of the head
-    smashDown: { hip: 0.68, lean: 0.7, ground: true, legs: [[0.48, 0, 0], [-0.45, 0, 0.4]], arms: [[0.82, 0.55, -1], [0.92, 0.5, -1]] },
+    // ELBOW SMASH into a wall: wind-up twists back with the near elbow cocked behind (fist at the
+    // chest), then a lunge with the elbow driven forward at shoulder height (fist tucked by the chin).
+    smashUp:   { hip: 0.85, lean: -0.15, ground: true, legs: [[0.35, 0, 0], [-0.45, 0, 0.3]], arms: [[0.4, 0.5, -1], [0.1, 0.25, -1]] },   // elbow cocked back, fist at the chest
+    smashMid:  { hip: 0.82, lean: 0.25, ground: true, legs: [[0.5, 0, 0], [-0.5, 0, 0.5]], arms: [[-0.2, 0.6, -1], [0.12, 0.28, 1]] },
+    smashDown: { hip: 0.8, lean: 0.45, ground: true, legs: [[0.62, 0, -0.1], [-0.6, 0, 0.7]], arms: [[-0.35, 0.65, -1], [0.08, 0.2, 1]] },   // elbow driven forward at shoulder height
     smashRec:  { hip: 0.95, lean: 0.15, ground: true, legs: [[0.15, 0, 0], [-0.12, 0, 0]], arms: [[0.0, 0.95, -1], [0.15, 0.92, -1]] },
     // Throw (a crate or a friend): wind back with the hand above the shoulder, then swing forward and up.
     // wind-up: weight on the back leg, throwing hand pulled back behind the shoulder (palm up, at head
@@ -322,8 +322,8 @@ export class PlayerView {
     if (s.smash) {                                               // wind-up → impact → recover
       const u = s.smash;
       return u < 0.25 ? mix(R('smashRec'), R('smashUp'), ease(u / 0.25))
-        : u < 0.36 ? mix(R('smashUp'), R('smashMid'), ease((u - 0.25) / 0.11))   // arc over the front,
-        : u < 0.45 ? mix(R('smashMid'), R('smashDown'), ease((u - 0.36) / 0.09))  // not across the face
+        : u < 0.36 ? mix(R('smashUp'), R('smashMid'), ease((u - 0.25) / 0.11))   // elbow swings through
+        : u < 0.45 ? mix(R('smashMid'), R('smashDown'), ease((u - 0.36) / 0.09))  // and drives into the wall
         : u < 0.7 ? R('smashDown') : mix(R('smashDown'), R('smashRec'), ease((u - 0.7) / 0.3));
     }
     if (s.toss) {                                                // wind back → release → settle
